@@ -1,8 +1,0 @@
-node_modules/
-build/
-artifacts/
-cache/
-.env
-foundry.toml
-out/
-coverage/
