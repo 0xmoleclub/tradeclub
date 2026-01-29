@@ -253,7 +253,7 @@ export default function TradingPanel({
       });
     } catch (error: any) {
       console.error("Failed to open position", error);
-      setActionError(error?.shortMessage ?? "Unable to submit transaction.");
+      setActionError("Unable to submit transaction. Please try again.");
     }
   };
 
@@ -484,7 +484,7 @@ export default function TradingPanel({
 
           {actionError && (
             <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {actionError}
+              ⚠️ {actionError}
             </div>
           )}
 

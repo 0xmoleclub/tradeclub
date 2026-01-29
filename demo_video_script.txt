@@ -1,0 +1,94 @@
+
+# TradeClub Demo Video Script
+**Total Duration:** ~2 minutes
+**Theme:** Dark, neon, esports, underground trading arena. Fast-paced and exciting.
+
+---
+
+### **Scene 1: The Hook - A New Arena**
+
+**Duration:** 15 seconds
+
+**Visuals:**
+*   **(0-3s)** Quick cuts of abstract, neon data visualizations and graphs moving quickly. A heartbeat sound effect in the background.
+*   **(3-8s)** A slick, animated TradeClub logo appears on screen with a neon glow.
+*   **(8-15s)** Sweeping, cinematic shots of the TradeClub UI, focusing on the polished dashboard, leaderboards, and vibrant charts. Show the "monachad" and "pepemon" avatars to give it personality. The UI should look alive with data.
+
+**Narration (Voiceover - confident, energetic):**
+> "Trading is a competition. But for too long, it's been a solo game. What if you could not only back the best traders... but join their squad in the arena?"
+
+---
+
+### **Scene 2: Effortless Onboarding**
+
+**Duration:** 15 seconds
+
+**Visuals:**
+*   **(15-18s)** User lands on the site and clicks a prominent "Enter the Arena" button.
+*   **(18-22s)** A MetaMask wallet connection modal appears. The user clicks to connect.
+*   **(22-27s)** The UI now shows a simple screen: "Create Your TradeClub Smart Account." A text below reads: "Your account creation is sponsored by the protocol." The user clicks "Create Account."
+*   **(27-30s)** A success animation with the message: "Welcome to the Club. Your Smart Account is active."
+
+**Narration:**
+> "Getting started is seamless. Connect your wallet and create your personal Smart Account in one click. We even sponsor the gas fees, so you can get into the action instantly, at no cost."
+
+---
+
+### **Scene 3: Introducing the Monachads**
+
+**Duration:** 20 seconds
+
+**Visuals:**
+*   **(30-37s)** Now onboarded, the user is on the "Matches" page. Their mouse scrolls through a list of active trading matches.
+*   **(37-45s)** The mouse clicks on a specific Monachad's profile. We see their stats: win rate, PnL, and past matches.
+*   **(45-50s)** The user clicks to join a match, showing the clear, time-limited rules (e.g., "1-Hour Blitz," "Highest PnL Wins").
+
+**Narration:**
+> "Now you're in. Welcome to TradeClub. This is where elite traders, the Monachads, prove their skill in high-stakes matches. See their stats, check their history, and choose your champion."
+
+---
+
+### **Scene 4: The Core Mechanic - Secure Delegation**
+
+**Duration:** 35 seconds
+
+**Visuals:**
+*   **(50-1:00s)** The user is on a "Delegate" screen for their chosen Monachad. The UI clearly shows sliders and input fields for "Delegation Amount," "Max Trade Size," and "Allowed Tokens."
+*   **(1:00-1:08s)** The user clicks "Delegate." The MetaMask wallet pops up, showing a **Smart Account delegation request**. The text is clear: "Grant trading permission to [Monachad's Name] for the duration of the match." **Crucially, it should show it's on the Monad Testnet.**
+*   **(1:08-1:15s)** The user approves the transaction in MetaMask. A confirmation message appears on the TradeClub UI: "Delegation Active! You are now copy-trading [Monachad's Name]."
+*   **(1:15-1:25s)** An animated graphic visually explains the concept: The Supporter's funds stay in their own Smart Account, while a "permission key" is temporarily given to the Monachad's strategy.
+
+**Narration:**
+> "And here's the revolution. Instead of sending funds away, you delegate authority directly from your MetaMask Smart Account. You set the rules and the limits. It's non-custodial, fully secure, and you are always in control. This is the power of Smart Account delegation, live on the Monad network."
+
+---
+
+### **Scene 5: The Payoff & The Pipeline**
+
+**Duration:** 30 seconds
+
+**Visuals:**
+*   **(1:25-1:32s)** Split screen. On one side, the Monachad executes a trade. On the other, the Supporter's dashboard shows the trade is pending.
+*   **(1:32-1:45s)** Hard cut to a multi-pane terminal. 
+    *   **Top Pane (Envio Indexer):** A log flashes: `EVENT DETECTED: TradeExecuted on contract 0x...`
+    *   **Bottom Pane (Backend):** Immediately, logs scroll by: `Received event from indexer.`, `Processing copy-trade for supporter 0xABC...`, `Executing trade via Smart Account...`, `Transaction successful: 0x123...`
+    *   The mouse cursor quickly highlights the indexer log and then the corresponding backend logs.
+*   **(1:45-1:55s)** Cut back to the split-screen UI. The Supporter's trade status flips to "Success," and their PnL updates. The match ends with a "VICTORY" screen.
+
+**Narration:**
+> "When your Monachad trades, our Envio-powered indexer instantly catches the on-chain event. This triggers our backend to execute the copy-trade through your secure Smart Account. This isn't a simulation; it's a live, high-speed pipeline from trade-to-copy, powered by Monad."
+
+---
+
+### **Scene 6: The Vision & Close**
+
+**Duration:** 15 seconds
+
+**Visuals:**
+*   **(1:55-2:03s)** Montage of the most exciting UI elements again: leaderboards, match entries, governance/bribe-war concepts (even if just a mockup screen).
+*   **(2:03-2:10s)** Final shot of the TradeClub logo, with the text "TradeClub - The Arena is Open" and social media handles below.
+
+**Narration:**
+> "Build your rep. Back the best. And earn your place in the arena. TradeClub. The future of trading is a team sport."
+
+---

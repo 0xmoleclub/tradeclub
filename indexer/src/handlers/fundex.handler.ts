@@ -138,6 +138,78 @@ FUNDex.PositionOpened.handler(async ({ event, context }) => {
   // Always index the event for data completeness
   context.PositionOpened.set(entity);
 
+  // Check if this is a supporter's smart account copying a Monachad position
+  // If so, create a mapping entry
+  const supporterRecords = await context.SupporterJoined.getWhere.smartAccount.eq(
+    traderAddress
+  );
+
+  console.log(
+    `[PositionOpened] Checking if trader ${traderAddress} is a supporter smart account... Found ${Array.isArray(supporterRecords) ? supporterRecords.length : 0} records`
+  );
+
+  if (Array.isArray(supporterRecords) && supporterRecords.length > 0) {
+    // This is a supporter's smart account position
+    const supporterRecord = supporterRecords[0]; // Assume one record per smart account
+    const monachad = supporterRecord.monachad.toLowerCase();
+    const matchId = supporterRecord.matchId;
+
+    // Find the most recent Monachad position opened for the same asset
+    // This assumes the supporter opened their position shortly after the Monachad
+    const monachadVault = await context.MatchVault.getWhere.matchId.eq(matchId);
+    
+    if (Array.isArray(monachadVault) && monachadVault.length > 0) {
+      const vaultAddr = monachadVault.find(
+        (v: any) => v.monachad.toLowerCase() === monachad
+      )?.matchVaultAddress;
+
+      if (vaultAddr) {
+        const monachadPositions = await context.PositionOpened.getWhere.trader.eq(
+          vaultAddr.toLowerCase()
+        );
+
+        if (Array.isArray(monachadPositions)) {
+          // Find the most recent Monachad position with matching asset opened BEFORE this supporter position
+          let matchingMonachadPosition: any = null;
+          let latestTimestamp = 0n;
+
+          for (const pos of monachadPositions) {
+            if (
+              pos.assetId === event.params.assetId &&
+              BigInt(pos.blockNumber) <= blockNumber &&
+              BigInt(pos.timestamp) > latestTimestamp
+            ) {
+              matchingMonachadPosition = pos;
+              latestTimestamp = BigInt(pos.timestamp);
+            }
+          }
+
+          if (matchingMonachadPosition) {
+            // Create position mapping
+            const mappingEntity = {
+              id: `${event.chainId}_${matchId}_${matchingMonachadPosition.positionId}_${supporterRecord.supporter}_${event.params.positionId}`,
+              matchId,
+              monachad,
+              monachadPositionId: matchingMonachadPosition.positionId,
+              supporter: supporterRecord.supporter.toLowerCase(),
+              supporterPositionId: event.params.positionId,
+              assetId: event.params.assetId,
+              opened: true,
+              blockNumber,
+              transactionHash: event.transaction.hash,
+              timestamp: event.params.timestamp,
+            };
+
+            context.SupporterPositionMapping.set(mappingEntity);
+            console.log(
+              `Created position mapping: Monachad ${matchingMonachadPosition.positionId} -> Supporter ${event.params.positionId}`
+            );
+          }
+        }
+      }
+    }
+  }
+
   if (vaultContext) {
     console.log("Is trader a Monachad?", true);
 
@@ -246,31 +318,72 @@ FUNDex.PositionClosed.handler(async ({ event, context }) => {
   if (vaultContext) {
     console.log("Is trader a Monachad?", true);
 
-    const closePositionData = encodeFunctionData({
-      abi: fundexAbi,
-      functionName: "closePosition",
-      args: [event.params.positionId, event.params.assetId],
-    });
+    // Query all supporter position mappings for this Monachad position
+    const mappings = await context.SupporterPositionMapping.getWhere.monachadPositionId.eq(
+      event.params.positionId
+    );
 
-    await notifyBackend("trade_closed", {
-      monachadAddress: vaultContext.monachad,
-      trade: {
-        target: event.srcAddress,
-        value: "0",
-        data: closePositionData,
-      },
-      metadata: {
-        dex: "FUNDex",
-        monachadPositionId: event.params.positionId.toString(),
-        assetId: event.params.assetId.toString(),
-        exitPrice: event.params.exitPrice.toString(),
-        pnl: event.params.pnl.toString(),
-        transactionHash: event.transaction.hash,
-        matchId: vaultContext.matchId,
-        matchVaultAddress: vaultContext.matchVaultAddress,
-        sizeToPortfolioBps: sizeToPortfolioBps?.toString(),
-      },
-    });
+    console.log(
+      `[PositionClosed] Found ${Array.isArray(mappings) ? mappings.length : 0} supporter position mappings for Monachad position ${event.params.positionId}`
+    );
+
+    // Send individual webhook per supporter with their specific closePosition calldata
+    if (Array.isArray(mappings)) {
+      for (const mapping of mappings) {
+        if (!mapping.opened) {
+          // Skip already closed positions
+          console.log(
+            `[PositionClosed] Skipping already closed supporter position ${mapping.supporterPositionId}`
+          );
+          continue;
+        }
+
+        console.log(
+          `[PositionClosed] Processing supporter ${mapping.supporter}: position ${mapping.supporterPositionId} (Monachad position ${event.params.positionId})`
+        );
+
+        // Encode close calldata with THIS supporter's position ID
+        const supporterCloseCalldata = encodeFunctionData({
+          abi: fundexAbi,
+          functionName: "closePosition",
+          args: [mapping.supporterPositionId, mapping.assetId],
+        });
+
+        // Send webhook for this specific supporter
+        // The backend sees this as just another trade_closed event with pre-encoded calldata
+        await notifyBackend("trade_closed", {
+          monachadAddress: vaultContext.monachad,
+          trade: {
+            target: event.srcAddress,
+            value: "0",
+            data: supporterCloseCalldata, // Supporter-specific calldata
+          },
+          metadata: {
+            dex: "FUNDex",
+            monachadPositionId: event.params.positionId.toString(),
+            supporterAddress: mapping.supporter, // Tag which supporter this is for
+            supporterPositionId: mapping.supporterPositionId.toString(),
+            assetId: mapping.assetId.toString(),
+            exitPrice: event.params.exitPrice.toString(),
+            pnl: event.params.pnl.toString(),
+            transactionHash: event.transaction.hash,
+            matchId: vaultContext.matchId,
+            matchVaultAddress: vaultContext.matchVaultAddress,
+            sizeToPortfolioBps: sizeToPortfolioBps?.toString(),
+          },
+        });
+
+        // Mark the mapping as closed
+        context.SupporterPositionMapping.set({
+          ...mapping,
+          opened: false,
+        });
+
+        console.log(
+          `Sent close webhook for supporter ${mapping.supporter}: position ${mapping.supporterPositionId}`
+        );
+      }
+    }
   } else {
     console.log("Is trader a Monachad?", false);
   }

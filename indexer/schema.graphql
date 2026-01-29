@@ -148,3 +148,17 @@ type PnLUpdated @entity {
   transactionHash: String!
   timestamp: BigInt!
 }
+
+type SupporterPositionMapping @entity {
+  id: ID!
+  matchId: BigInt!
+  monachad: String!
+  monachadPositionId: BigInt!
+  supporter: String!
+  supporterPositionId: BigInt!
+  assetId: BigInt!
+  opened: Boolean!
+  blockNumber: BigInt!
+  transactionHash: String!
+  timestamp: BigInt!
+}

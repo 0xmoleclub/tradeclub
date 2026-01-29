@@ -47,6 +47,7 @@ interface CopyTradeParams {
   };
   metadata?: {
     sizeToPortfolioBps?: string;
+    supporterAddress?: string; // If provided, only execute for this specific supporter
     [key: string]: any;
   };
 }
@@ -347,60 +348,77 @@ export class CopyEngineService implements OnModuleInit {
   /**
    * Execute pro rata copy trades for all active supporters using BATCH PROCESSING
    * This submits multiple delegated trades in a single bundler call (like multicall)
+   *
+   * If metadata.supporterAddress is provided, only executes for that specific supporter
+   * (used for close trades where each supporter has different calldata with their positionId)
    */
   async executeCopyTrades(params: CopyTradeParams): Promise<void> {
-    const { monachadAddress, matchId, originalTrade } = params;
+    const { monachadAddress, matchId, originalTrade, metadata } = params;
 
-    // Get all active delegations for this Monachad in this match
-    const activeDelegations = await this.db.delegation.findMany({
-      where: {
-        monachad: monachadAddress.toLowerCase(),
-        matchId,
-        isActive: true,
-        expiresAt: {
-          gte: new Date(),
-        },
+    this.logger.log(
+      `[executeCopyTrades] START - Monachad: ${monachadAddress}, Match: ${matchId}, SupporterAddress: ${metadata?.supporterAddress || 'N/A'}`
+    );
+
+    // Build delegation query - filter by specific supporter if provided
+    const delegationWhere: any = {
+      monachad: monachadAddress.toLowerCase(),
+      matchId,
+      isActive: true,
+      expiresAt: {
+        gte: new Date(),
       },
+    };
+
+    // If this is a supporter-specific trade (e.g., close with custom positionId), filter to that supporter
+    if (metadata?.supporterAddress) {
+      delegationWhere.supporter = metadata.supporterAddress.toLowerCase();
+      this.logger.log(
+        `Executing supporter-specific trade for ${metadata.supporterAddress}`
+      );
+    }
+
+    // Get active delegations
+    const activeDelegations = await this.db.delegation.findMany({
+      where: delegationWhere,
     });
+
+    this.logger.log(
+      `[executeCopyTrades] Found ${activeDelegations.length} active delegation(s)`
+    );
 
     if (activeDelegations.length === 0) {
       this.logger.log(
-        `No active delegations for Monachad ${monachadAddress} in match ${matchId}`
+        metadata?.supporterAddress
+          ? `No active delegation for supporter ${metadata.supporterAddress}`
+          : `No active delegations for Monachad ${monachadAddress} in match ${matchId}`
       );
       return;
     }
 
     this.logger.log(
-      `Preparing batch of ${activeDelegations.length} copy trades for Monachad ${monachadAddress}`
+      `Preparing batch of ${activeDelegations.length} copy trade(s) for Monachad ${monachadAddress}`
     );
 
-    // Calculate proportions
-    let totalDelegatedAmount = BigInt(0);
-    for (const delegation of activeDelegations) {
-      totalDelegatedAmount += BigInt(delegation.amount);
-    }
-
-    const originalTradeValue = BigInt(originalTrade.value);
-    const sizeToPortfolioBps = params.metadata?.sizeToPortfolioBps
-      ? BigInt(params.metadata.sizeToPortfolioBps)
+    const sizeToPortfolioBps = metadata?.sizeToPortfolioBps
+      ? BigInt(metadata.sizeToPortfolioBps)
       : null;
-
-    if (!sizeToPortfolioBps) {
-      this.logger.error(
-        "executeCopyTrades: sizeToPortfolioBps missing from metadata, aboring copy trade"
-      );
-      return;
-    }
 
     // Prepare batch of trades
     const batchTrades: BatchCopyTrade[] = [];
 
     for (const delegation of activeDelegations) {
       try {
-        // Calculate proportional trade size
-        const delegationAmount = BigInt(delegation.amount);
-        const proportionalValue: bigint =
-          (delegationAmount * sizeToPortfolioBps) / 10000n;
+        // Calculate trade value
+        let tradeValue: bigint;
+
+        if (sizeToPortfolioBps !== null) {
+          // Proportional sizing (for opens)
+          const delegationAmount = BigInt(delegation.amount);
+          tradeValue = (delegationAmount * sizeToPortfolioBps) / 10000n;
+        } else {
+          // Fixed value (for closes, usually 0)
+          tradeValue = BigInt(originalTrade.value);
+        }
 
         // Validate delegation is still valid on-chain
         const isValid =
@@ -415,15 +433,17 @@ export class CopyEngineService implements OnModuleInit {
           continue;
         }
 
-        // Check spending limits
-        const spentAmount = BigInt(delegation.spentAmount);
-        const maxSpend = BigInt(delegation.amount);
+        // Check spending limits (skip for zero-value trades like closes)
+        if (tradeValue > 0n) {
+          const spentAmount = BigInt(delegation.spentAmount);
+          const maxSpend = BigInt(delegation.amount);
 
-        if (spentAmount + proportionalValue > maxSpend) {
-          this.logger.warn(
-            `Delegation ${delegation.delegationHash} would exceed spending limit, skipping`
-          );
-          continue;
+          if (spentAmount + tradeValue > maxSpend) {
+            this.logger.warn(
+              `Delegation ${delegation.delegationHash} would exceed spending limit, skipping`
+            );
+            continue;
+          }
         }
 
         // Retrieve the signed delegation from database (stored when user created it)
@@ -447,8 +467,8 @@ export class CopyEngineService implements OnModuleInit {
           delegation: signedDelegation,
           delegationRecord: delegation,
           target: originalTrade.target,
-          value: proportionalValue,
-          data: originalTrade.data,
+          value: tradeValue,
+          data: originalTrade.data, // Pre-encoded by indexer (may contain supporter-specific positionId for closes)
         });
       } catch (error) {
         this.logger.error(

@@ -297,15 +297,13 @@ export class WebhooksController {
 
   /**
    * Handle trade closed - DEX agnostic
-   * Finds position mappings and delegates to copy-engine
-   *
-   * NOTE: Position mapping (Monachad positionId -> Supporter positionIds) needs to be implemented.
-   * For now, we execute close trades for all active matches of this Monachad.
-   * TODO: Implement proper position tracking (add metadata field to Trade or create PositionMapping table)
+   * Supports both:
+   * 1. Monachad closes (broadcasts to all supporters)
+   * 2. Individual supporter close (webhook per supporter with their positionId in calldata)
    */
   private async handleTradeClosed(payload: WebhookPayload) {
     this.logger.log(
-      `Trade closed: Monachad=${payload.monachadAddress}, DEX=${payload.metadata?.dex}`
+      `Trade closed: Monachad=${payload.monachadAddress}, DEX=${payload.metadata?.dex}, Supporter=${payload.metadata?.supporterAddress || 'N/A'}`
     );
 
     if (!payload.monachadAddress) {
@@ -313,7 +311,57 @@ export class WebhooksController {
       return;
     }
 
-    // Find active matches where this address is a Monachad participant
+    // Check if this is a supporter-specific webhook (indexer sends one per supporter for closes)
+    const supporterAddress = payload.metadata?.supporterAddress;
+    const matchId = payload.metadata?.matchId;
+
+    if (supporterAddress && matchId) {
+      // This is a supporter-specific close with pre-encoded calldata containing their positionId
+      this.logger.log(
+        `Processing supporter-specific close: supporter=${supporterAddress}, match=${matchId}`
+      );
+
+      try {
+        await this.copyEngine.executeCopyTrades({
+          monachadAddress: payload.monachadAddress.toLowerCase(),
+          matchId: matchId,
+          originalTrade: payload.trade, // Contains closePosition(supporterPositionId, assetId)
+          metadata: payload.metadata, // Includes supporterAddress for filtering
+        });
+        this.logger.log(
+          `Supporter-specific close executed for ${supporterAddress} in match ${matchId}`
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to execute supporter close for ${supporterAddress}`,
+          error
+        );
+      }
+
+      // Emit frontend event for this specific close
+      try {
+        this.eventEmitter.emit('monachad.trade', {
+          matchId: matchId,
+          monachadAddress: payload.monachadAddress,
+          supporterAddress: supporterAddress,
+          tradeType: "CLOSE",
+          dex: payload.metadata?.dex || "",
+          amount: payload.trade?.value || "",
+          positionId: payload.metadata?.supporterPositionId,
+          exitPrice: payload.metadata?.exitPrice,
+          pnl: payload.metadata?.pnl,
+          transactionHash: payload.metadata?.transactionHash || "",
+          timestamp: Date.now(),
+        });
+      } catch (error) {
+        this.logger.error("Failed to emit supporter close event", error);
+      }
+
+      return; // Done - this was a supporter-specific webhook
+    }
+
+    // Legacy path: Monachad close without supporter-specific webhooks
+    // (Shouldn't happen with new indexer, but keep for backwards compatibility)
     const matches = await this.matchesService.getActiveMatchesForMonachad(
       payload.monachadAddress
     );
@@ -329,8 +377,6 @@ export class WebhooksController {
       `Found ${matches.length} active match(es), executing close trades`
     );
 
-
-    this.logger.log(`Found ${matches.length} active match(es) for close: ${matches.map(m=>m.matchId).join(',')}`);
     const preferredMatchIdClose = payload.metadata?.matchId;
     if (preferredMatchIdClose) {
       this.logger.log(`Webhook includes metadata.matchId=${preferredMatchIdClose}, will emit only to that match if present`);

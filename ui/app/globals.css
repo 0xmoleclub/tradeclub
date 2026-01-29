@@ -181,3 +181,7 @@
 .animate-slide-in {
   animation: slide-in 0.4s ease-out;
 }
+
+nextjs-portal {
+  display: none;
+}
