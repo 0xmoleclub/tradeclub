@@ -57,7 +57,7 @@ function main() {
   console.log('{ \n  "walletAddress": "' + walletAddress + '", \n  "signature": "' + signatureBase58 + '"\n}');
   console.log('');
   console.log('curl:');
-  console.log(`curl -X POST http://localhost:3002/api/auth/login \\\n  -H "Content-Type: application/json" \\\n  -d '{"walletAddress":"${walletAddress}","signature":"${signatureBase58}"}'`);
+  console.log(`curl -X POST http://localhost:3002/api/v1/auth/login \\\n  -H "Content-Type: application/json" \\\n  -d '{"walletAddress":"${walletAddress}","signature":"${signatureBase58}"}'`);
 }
 
 main();

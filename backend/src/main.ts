@@ -34,7 +34,7 @@ async function bootstrap() {
   app.setGlobalPrefix(configService.get('app.apiPrefix', 'api'));
   app.enableVersioning({
     type: VersioningType.URI,
-    defaultVersion: configService.get('app.apiVersion', '1'),
+    defaultVersion: configService.get('app.apiVersion', 'v1'),
   });
 
   // Global pipes
