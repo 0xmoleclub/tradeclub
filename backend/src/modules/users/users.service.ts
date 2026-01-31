@@ -3,7 +3,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
-import { User, UserRole, UserStatus } from '@prisma/client';
+import { User } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -23,10 +23,10 @@ export class UsersService {
     const nonce = this.randomNonce();
 
     const user = await this.prisma.user.upsert({
-      where: { walletAddress: walletAddress.toLowerCase() },
+      where: { walletAddress },
       update: { nonce },
       create: {
-        walletAddress: walletAddress.toLowerCase(),
+        walletAddress,
         nonce,
       },
     });
@@ -49,16 +49,17 @@ export class UsersService {
 
   async findAll(): Promise<User[]> {
     return this.prisma.user.findMany({
-      select: {
-        id: true,
-        walletAddress: true,
-        name: true,
-        avatar: true,
-        role: true,
-        status: true,
-        lastLoginAt: true,
-        createdAt: true,
-        updatedAt: true,
+      include: {
+        agentWallet: {
+          select: {
+            id: true,
+            publicKey: true,
+            isDelegated: true,
+            subaccountIndex: true,
+            status: true,
+            delegatedAt: true,
+          },
+        },
       },
     });
   }
@@ -88,7 +89,7 @@ export class UsersService {
 
   async findByWalletAddress(walletAddress: string): Promise<User | null> {
     return this.prisma.user.findUnique({
-      where: { walletAddress: walletAddress.toLowerCase() },
+      where: { walletAddress },
     });
   }
 
@@ -98,10 +99,5 @@ export class UsersService {
       where: { id },
       data,
     });
-  }
-
-  async remove(id: string): Promise<void> {
-    await this.findById(id); // Verify user exists
-    await this.prisma.user.delete({ where: { id } });
   }
 }
