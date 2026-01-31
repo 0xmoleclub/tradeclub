@@ -25,6 +25,8 @@
     "db:push": "prisma db push"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@drift-labs/sdk": "2.157.0-beta.1",
     "@nestjs/axios": "^3.0.1",
     "@nestjs/common": "^10.3.0",
     "@nestjs/config": "^3.1.1",
@@ -37,6 +39,7 @@
     "@nestjs/terminus": "^10.2.0",
     "@nestjs/throttler": "^5.1.1",
     "@prisma/client": "^5.22.0",
+    "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "bs58": "^6.0.0",
     "class-transformer": "^0.5.1",
@@ -93,5 +96,10 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "pnpm": {
+    "overrides": {
+      "@solana/web3.js": "^1.98.4"
+    }
   }
 }

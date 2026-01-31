@@ -9,6 +9,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
 import { AgentWalletsModule } from './modules/agent-wallets/agent-wallets.module';
+import { DriftModule } from './modules/drift/drift.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AgentWalletsModule } from './modules/agent-wallets/agent-wallets.module
     UsersModule,
     HealthModule,
     AgentWalletsModule,
+    DriftModule,
   ],
 })
 export class AppModule {}

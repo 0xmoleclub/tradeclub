@@ -1,6 +1,6 @@
 # TradeClub Backend API
 
-A NestJS backend API for TradeClub with Solana wallet authentication and agent wallet delegation.
+A NestJS backend API for TradeClub with Solana wallet authentication and Drift Protocol integration.
 
 ## Features
 
@@ -12,6 +12,11 @@ A NestJS backend API for TradeClub with Solana wallet authentication and agent w
   - User creates agent wallet via API
   - User delegates trading authority on Drift Protocol
   - Funds stay in user's wallet - agent only has trading authority
+- **Drift Protocol Integration**: Full perp trading
+  - Deposit/withdraw collateral
+  - Place/cancel orders (market, limit)
+  - View positions and account info
+  - Real-time market data
 - **Prisma ORM**: PostgreSQL with type-safe queries
 - **API Documentation**: Swagger/OpenAPI
 - **Security**: Helmet, CORS, rate limiting, AES-256-GCM encryption
@@ -78,6 +83,7 @@ cp .env.example .env
 | `JWT_SECRET` | JWT secret key | - |
 | `WALLET_ENCRYPTION_KEY` | AES-256 encryption key | - |
 | `SOLANA_RPC_URL` | Solana RPC endpoint | `https://api.devnet.solana.com` |
+| `SOLANA_NETWORK` | Network (devnet/mainnet) | `devnet` |
 
 ## Running the Application
 
@@ -95,30 +101,49 @@ npm run start:prod
 Swagger docs available at: `http://localhost:3002/docs`
 
 ### Authentication
-- `GET /api/v1/auth/nonce?walletAddress=...` - Get nonce for signing
-- `POST /api/v1/auth/login` - Login with signature
-  ```json
-  {
-    "walletAddress": "7xKX...",
-    "signature": "5Hd..."
-  }
-  ```
-- `GET /api/v1/auth/check` - Validate JWT token (requires auth)
-- `GET /api/v1/auth/me` - Get current user profile (requires auth)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/auth/nonce?walletAddress=...` | Get nonce for signing |
+| POST | `/api/v1/auth/login` | Login with signature |
+| GET | `/api/v1/auth/check` | Validate JWT token (auth required) |
+| GET | `/api/v1/auth/me` | Get current user profile (auth required) |
 
 ### Agent Wallet
-- `POST /api/v1/agent-wallets` - Create agent wallet (authenticated)
-- `GET /api/v1/agent-wallets/me` - Get my agent wallet
-- `PATCH /api/v1/agent-wallets/:id/delegate` - Mark as delegated
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/agent-wallets` | Create agent wallet (auth required) |
+| GET | `/api/v1/agent-wallets/me` | Get my agent wallet |
+| PATCH | `/api/v1/agent-wallets/:id/delegate` | Mark as delegated |
+| PATCH | `/api/v1/agent-wallets/:id/revoke` | Revoke delegation |
+
+### Drift Trading
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/drift/account` | Get account info (collateral, margin, leverage) |
+| POST | `/api/v1/drift/account/initialize` | Initialize Drift account |
+| GET | `/api/v1/drift/positions` | Get open positions |
+| GET | `/api/v1/drift/positions/:marketIndex` | Get position by market |
+| GET | `/api/v1/drift/orders` | Get open orders |
+| POST | `/api/v1/drift/orders` | Place order (market/limit) |
+| POST | `/api/v1/drift/orders/cancel` | Cancel order |
+| POST | `/api/v1/drift/orders/cancel-all` | Cancel all orders |
+| POST | `/api/v1/drift/deposit` | Deposit collateral (USDC) |
+| POST | `/api/v1/drift/withdraw` | Withdraw collateral |
+| GET | `/api/v1/drift/markets` | Get available markets |
+| GET | `/api/v1/drift/markets/:marketIndex/price` | Get market price |
 
 ### Users
-- `GET /api/v1/users` - Get all users (Admin/Moderator)
-- `GET /api/v1/users/:id` - Get user by ID
-- `PATCH /api/v1/users/:id` - Update user
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/users` | Get all users (Admin/Moderator) |
+| GET | `/api/v1/users/:id` | Get user by ID |
+| PATCH | `/api/v1/users/:id` | Update user |
 
 ### Health
-- `GET /api/v1/health` - Health check
-- `GET /api/v1/health/liveness` - Kubernetes liveness probe
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/health` | Health check |
+| GET | `/api/v1/health/liveness` | Kubernetes liveness probe |
 
 ## Login Flow
 
@@ -149,6 +174,44 @@ const { accessToken, user } = await fetch('/api/v1/auth/login', {
 4. User delegates on Drift Protocol UI (using agent wallet public key)
 5. User calls `PATCH /api/v1/agent-wallets/:id/delegate` to mark as delegated
 6. Agent wallet can now trade on behalf of user
+
+## Drift Trading Flow
+
+```typescript
+// 1. Initialize Drift account (one-time)
+await fetch('/api/v1/drift/account/initialize', {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${accessToken}` }
+});
+
+// 2. Deposit USDC collateral
+await fetch('/api/v1/drift/deposit', {
+  method: 'POST',
+  headers: { 
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    marketIndex: 0, // USDC
+    amount: '1000000000' // 1000 USDC (6 decimals)
+  })
+});
+
+// 3. Place a market order
+await fetch('/api/v1/drift/orders', {
+  method: 'POST',
+  headers: { 
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    marketIndex: 0, // SOL-PERP
+    direction: 'LONG',
+    baseAssetAmount: '1000000000', // 1 SOL
+    orderType: 'MARKET'
+  })
+});
+```
 
 ## Testing Scripts
 
