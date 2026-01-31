@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from './../src/app.module';
 
 describe('AppController (e2e)', () => {
@@ -23,7 +23,7 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/api/health')
       .expect(200)
-      .expect((res) => {
+      .expect((res: any) => {
         expect(res.body.success).toBe(true);
         expect(res.body.data).toBeDefined();
       });
@@ -33,17 +33,17 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/api/health/liveness')
       .expect(200)
-      .expect((res) => {
+      .expect((res: any) => {
         expect(res.body.status).toBe('ok');
       });
   });
 
-  describe('Auth (Web3)', () => {
-    it('/auth/nonce (GET) - should return nonce for wallet', () => {
+  describe('Auth (Web3 - Solana)', () => {
+    it('/auth/nonce (GET) - should return nonce for Solana wallet', () => {
       return request(app.getHttpServer())
-        .get('/api/auth/nonce?walletAddress=0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb')
+        .get('/api/auth/nonce?walletAddress=7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU')
         .expect(200)
-        .expect((res) => {
+        .expect((res: any) => {
           expect(res.body.success).toBe(true);
           expect(res.body.data.nonce).toBeDefined();
           expect(res.body.data.message).toContain('Nonce:');
