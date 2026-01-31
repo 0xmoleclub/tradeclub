@@ -1,15 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class UtilsService {
-  /**
-   * Generate a UUID v4
-   */
-  generateUUID(): string {
-    return uuidv4();
-  }
-
   /**
    * Generate a random string of specified length
    */
