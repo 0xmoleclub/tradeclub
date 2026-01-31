@@ -1,0 +1,43 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
+
+import { appConfig, databaseConfig, jwtConfig, throttleConfig } from './config';
+import { DatabaseModule } from './database/database.module';
+import { SharedModule } from './shared/shared.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { HealthModule } from './modules/health/health.module';
+
+@Module({
+  imports: [
+    // Configuration
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [appConfig, databaseConfig, jwtConfig, throttleConfig],
+      envFilePath: ['.env', '.env.local'],
+    }),
+
+    // Rate limiting
+    ThrottlerModule.forRootAsync({
+      useFactory: () => ({
+        throttlers: [
+          {
+            ttl: 60000, // 1 minute
+            limit: 100, // 100 requests per minute
+          },
+        ],
+      }),
+    }),
+
+    // Core modules
+    DatabaseModule,
+    SharedModule,
+
+    // Feature modules
+    AuthModule,
+    UsersModule,
+    HealthModule,
+  ],
+})
+export class AppModule {}
