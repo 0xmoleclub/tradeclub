@@ -1,5 +1,3 @@
-import { UserRole } from '../enums';
-
 export interface IJwtPayload {
   sub: string;
   walletAddress: string;

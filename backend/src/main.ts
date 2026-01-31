@@ -3,7 +3,7 @@ import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
-import * as compression from 'compression';
+import compression from 'compression';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -26,15 +26,15 @@ async function bootstrap() {
 
   // CORS
   app.enableCors({
-    origin: configService.get('CORS_ORIGIN', '*'),
+    origin: configService.get('app.corsOrigin', '*'),
     credentials: true,
   });
 
   // Global prefix and versioning
-  app.setGlobalPrefix(configService.get('API_PREFIX', 'api'));
+  app.setGlobalPrefix(configService.get('app.apiPrefix', 'api'));
   app.enableVersioning({
     type: VersioningType.URI,
-    defaultVersion: configService.get('API_VERSION', '1'),
+    defaultVersion: configService.get('app.apiVersion', '1'),
   });
 
   // Global pipes
@@ -63,12 +63,12 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  const port = configService.get<number>('PORT', 3002);
+  const port = configService.get<number>('app.port', 3002);
 
   await app.listen(port);
 
   logger.log(
-    `API is running on: http://localhost:${port}/${configService.get('API_PREFIX', 'api')}`,
+    `API is running on: http://localhost:${port}/${configService.get('app.apiPrefix', 'api')}`,
     'Bootstrap',
   );
   logger.log(

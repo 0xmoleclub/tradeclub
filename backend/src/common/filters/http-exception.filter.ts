@@ -19,12 +19,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = exception.getStatus();
     const exceptionResponse = exception.getResponse();
 
-    let message: string;
+    let message: string | string[] = 'Error occurred';
     let errors: any;
 
     if (typeof exceptionResponse === 'string') {
       message = exceptionResponse;
-    } else if (typeof exceptionResponse === 'object') {
+    } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
       message = (exceptionResponse as any).message || 'Error occurred';
       errors = (exceptionResponse as any).errors;
     }

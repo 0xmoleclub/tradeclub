@@ -37,17 +37,18 @@
     "@nestjs/terminus": "^10.2.0",
     "@nestjs/throttler": "^5.1.1",
     "@prisma/client": "^5.22.0",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "compression": "^1.7.4",
-    "ethers": "^6.10.0",
     "helmet": "^7.1.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
-    "winston": "^3.11.0",
-    "winston-daily-rotate-file": "^4.7.1"
+    "tweetnacl": "^1.0.3",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.3.0",
