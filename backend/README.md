@@ -124,7 +124,9 @@ Swagger docs available at: `http://localhost:3002/docs`
 | GET | `/api/v1/drift/positions` | Get open positions |
 | GET | `/api/v1/drift/positions/:marketIndex` | Get position by market |
 | GET | `/api/v1/drift/orders` | Get open orders |
-| POST | `/api/v1/drift/orders` | Place order (market/limit) |
+| POST | `/api/v1/drift/orders` | Place order (market/limit/trigger) |
+| POST | `/api/v1/drift/orders/take-profit` | Place take profit order |
+| POST | `/api/v1/drift/orders/stop-loss` | Place stop loss order |
 | POST | `/api/v1/drift/orders/cancel` | Cancel order |
 | POST | `/api/v1/drift/orders/cancel-all` | Cancel all orders |
 | POST | `/api/v1/drift/deposit` | Deposit collateral (USDC) |
@@ -209,6 +211,36 @@ await fetch('/api/v1/drift/orders', {
     direction: 'LONG',
     baseAssetAmount: '1000000000', // 1 SOL
     orderType: 'MARKET'
+  })
+});
+
+// 4. Place Stop Loss (at $140)
+await fetch('/api/v1/drift/orders/stop-loss', {
+  method: 'POST',
+  headers: { 
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    marketIndex: 0,
+    direction: 'SHORT', // Opposite of position
+    baseAssetAmount: '1000000000',
+    triggerPrice: '140000000', // $140
+  })
+});
+
+// 5. Place Take Profit (at $180)
+await fetch('/api/v1/drift/orders/take-profit', {
+  method: 'POST',
+  headers: { 
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    marketIndex: 0,
+    direction: 'SHORT', // Opposite of position
+    baseAssetAmount: '1000000000',
+    triggerPrice: '180000000', // $180
   })
 });
 ```

@@ -11,7 +11,6 @@ export interface PlaceOrderParams {
   triggerPrice?: BN;
   reduceOnly?: boolean;
   postOnly?: boolean;
-  immediateOrCancel?: boolean;
   auctionDuration?: number;
   auctionStartPrice?: BN;
   auctionEndPrice?: BN;

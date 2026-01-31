@@ -43,7 +43,7 @@ export class PlaceOrderDto {
   price?: string;
 
   @ApiPropertyOptional({
-    description: 'Trigger price (for trigger orders)',
+    description: 'Trigger price (for stop loss / take profit orders)',
     example: '160000000',
   })
   @IsOptional()
@@ -65,12 +65,4 @@ export class PlaceOrderDto {
   @IsOptional()
   @IsBoolean()
   postOnly?: boolean;
-
-  @ApiPropertyOptional({
-    description: 'Immediate or cancel',
-    default: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  immediateOrCancel?: boolean;
 }

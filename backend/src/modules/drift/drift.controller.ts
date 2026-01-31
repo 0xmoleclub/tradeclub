@@ -18,7 +18,7 @@ import { DriftService } from './services/drift.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Payload } from '../auth/auth.interface';
-import { PlaceOrderDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
+import { PlaceOrderDto, PlaceTpSlDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
 import { PositionDirection, OrderType, BN } from '@drift-labs/sdk';
 
 @ApiTags('Drift Trading')
@@ -121,7 +121,6 @@ export class DriftController {
       triggerPrice: dto.triggerPrice ? new BN(dto.triggerPrice) : undefined,
       reduceOnly: dto.reduceOnly,
       postOnly: dto.postOnly,
-      immediateOrCancel: dto.immediateOrCancel,
     });
 
     await driftClient.unsubscribe();
@@ -152,6 +151,44 @@ export class DriftController {
     const txSig = await this.driftService.cancelAllOrders(driftClient);
     await driftClient.unsubscribe();
     return { success: true, signature: txSig };
+  }
+
+  @Post('orders/take-profit')
+  @ApiOperation({
+    summary: 'Place Take Profit order',
+    description: 'Place a take profit order (reduces position when price hits target)',
+  })
+  async placeTakeProfit(@CurrentUser() user: Payload, @Body() dto: PlaceTpSlDto) {
+    const driftClient = await this.driftService.initializeForUser(user.id);
+    const txSig = await this.driftService.placeTpSlOrder(driftClient, {
+      marketIndex: dto.marketIndex,
+      direction: dto.direction as PositionDirection,
+      baseAssetAmount: new BN(dto.baseAssetAmount),
+      triggerPrice: new BN(dto.triggerPrice),
+      limitPrice: dto.limitPrice ? new BN(dto.limitPrice) : undefined,
+      isStopLoss: false,
+    });
+    await driftClient.unsubscribe();
+    return { success: true, signature: txSig, type: 'TAKE_PROFIT' };
+  }
+
+  @Post('orders/stop-loss')
+  @ApiOperation({
+    summary: 'Place Stop Loss order',
+    description: 'Place a stop loss order (reduces position when price hits stop)',
+  })
+  async placeStopLoss(@CurrentUser() user: Payload, @Body() dto: PlaceTpSlDto) {
+    const driftClient = await this.driftService.initializeForUser(user.id);
+    const txSig = await this.driftService.placeTpSlOrder(driftClient, {
+      marketIndex: dto.marketIndex,
+      direction: dto.direction as PositionDirection,
+      baseAssetAmount: new BN(dto.baseAssetAmount),
+      triggerPrice: new BN(dto.triggerPrice),
+      limitPrice: dto.limitPrice ? new BN(dto.limitPrice) : undefined,
+      isStopLoss: true,
+    });
+    await driftClient.unsubscribe();
+    return { success: true, signature: txSig, type: 'STOP_LOSS' };
   }
 
   // ==================== Collateral Management ====================

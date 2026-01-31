@@ -7,8 +7,11 @@ import {
   PositionDirection,
   OrderType,
   MarketType,
+  OrderTriggerCondition,
   getMarketOrderParams,
   getLimitOrderParams,
+  getTriggerMarketOrderParams,
+  getTriggerLimitOrderParams,
   getUserAccountPublicKey,
   DevnetPerpMarkets,
   MainnetPerpMarkets,
@@ -249,6 +252,33 @@ export class DriftService implements OnModuleInit {
         });
         break;
 
+      case OrderType.TRIGGER_MARKET:
+        optionalParams = getTriggerMarketOrderParams({
+          marketIndex: params.marketIndex,
+          direction: params.direction,
+          baseAssetAmount: params.baseAssetAmount,
+          triggerPrice: params.triggerPrice!,
+          triggerCondition: params.direction === PositionDirection.LONG 
+            ? OrderTriggerCondition.ABOVE 
+            : OrderTriggerCondition.BELOW,
+          reduceOnly: params.reduceOnly ?? true,
+        });
+        break;
+
+      case OrderType.TRIGGER_LIMIT:
+        optionalParams = getTriggerLimitOrderParams({
+          marketIndex: params.marketIndex,
+          direction: params.direction,
+          baseAssetAmount: params.baseAssetAmount,
+          price: params.price!,
+          triggerPrice: params.triggerPrice!,
+          triggerCondition: params.direction === PositionDirection.LONG 
+            ? OrderTriggerCondition.ABOVE 
+            : OrderTriggerCondition.BELOW,
+          reduceOnly: params.reduceOnly ?? true,
+        });
+        break;
+
       default:
         throw new Error(`Unsupported order type: ${params.orderType}`);
     }
@@ -260,6 +290,67 @@ export class DriftService implements OnModuleInit {
 
     const txSig = await driftClient.placePerpOrder(orderParams);
     this.logger.log(`Placed order: ${txSig}`);
+    
+    return txSig;
+  }
+
+  /**
+   * Place Take Profit or Stop Loss order
+   * Simplified helper for TP/SL orders
+   */
+  async placeTpSlOrder(
+    driftClient: DriftClient,
+    params: {
+      marketIndex: number;
+      direction: PositionDirection;
+      baseAssetAmount: BN;
+      triggerPrice: BN;
+      limitPrice?: BN;
+      isStopLoss: boolean;
+    },
+  ): Promise<string> {
+    // Determine trigger condition
+    // For LONG position: TP = trigger above, SL = trigger below
+    // For SHORT position: TP = trigger below, SL = trigger above
+    const triggerCondition = params.isStopLoss
+      ? (params.direction === PositionDirection.LONG 
+          ? OrderTriggerCondition.BELOW 
+          : OrderTriggerCondition.ABOVE)
+      : (params.direction === PositionDirection.LONG 
+          ? OrderTriggerCondition.ABOVE 
+          : OrderTriggerCondition.BELOW);
+
+    let optionalParams;
+
+    if (params.limitPrice && params.limitPrice.gt(new BN(0))) {
+      // Trigger Limit Order (TP/SL with limit price)
+      optionalParams = getTriggerLimitOrderParams({
+        marketIndex: params.marketIndex,
+        direction: params.direction,
+        baseAssetAmount: params.baseAssetAmount,
+        price: params.limitPrice,
+        triggerPrice: params.triggerPrice,
+        triggerCondition,
+        reduceOnly: true,
+      });
+    } else {
+      // Trigger Market Order (TP/SL with market execution)
+      optionalParams = getTriggerMarketOrderParams({
+        marketIndex: params.marketIndex,
+        direction: params.direction,
+        baseAssetAmount: params.baseAssetAmount,
+        triggerPrice: params.triggerPrice,
+        triggerCondition,
+        reduceOnly: true,
+      });
+    }
+
+    const orderParams = getOrderParams(optionalParams, {
+      marketType: MarketType.PERP,
+    });
+
+    const txSig = await driftClient.placePerpOrder(orderParams);
+    this.logger.log(`Placed ${params.isStopLoss ? 'Stop Loss' : 'Take Profit'} order: ${txSig}`);
     
     return txSig;
   }
