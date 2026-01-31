@@ -48,3 +48,6 @@ tmp/
 temp/
 *.tmp
 *.temp
+
+# Keypair files
+*.keypair.json
