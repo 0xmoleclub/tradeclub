@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { verifyMessage } from 'ethers';
+import { PublicKey } from '@solana/web3.js';
+import * as nacl from 'tweetnacl';
+import bs58 from 'bs58';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './auth.interface';
@@ -16,9 +18,10 @@ export class AuthService {
 
   /**
    * Prepare the message that user needs to sign
+   * Uses Solana's standard message format
    */
   prepareSigningMessage(nonce: string): string {
-    return `Please sign this message to verify your address. Nonce: ${nonce}`;
+    return `Sign this message to verify your wallet. Nonce: ${nonce}`;
   }
 
   /**
@@ -36,30 +39,51 @@ export class AuthService {
   }
 
   /**
-   * Web3 Login with signature verification
+   * Verify Solana signature using Ed25519
+   */
+  private verifySolanaSignature(
+    message: string,
+    signatureBase58: string,
+    publicKeyBase58: string,
+  ): boolean {
+    try {
+      // Validate public key format
+      const publicKey = new PublicKey(publicKeyBase58);
+      
+      // Decode signature from base58
+      const signature = bs58.decode(signatureBase58);
+      
+      // Convert message to Uint8Array
+      const messageBytes = new TextEncoder().encode(message);
+      
+      // Verify using Ed25519
+      return nacl.sign.detached.verify(
+        messageBytes,
+        signature,
+        publicKey.toBytes(),
+      );
+    } catch (error) {
+      this.logger.error('Signature verification error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Web3 Login with Solana signature verification
    */
   async login(data: LoginDto) {
     const { walletAddress, signature } = data;
 
-    const user = await this.usersService.findByWalletAddress(
-      walletAddress.toLowerCase(),
-    );
+    const user = await this.usersService.findByWalletAddress(walletAddress);
 
     if (!user || !user.nonce) {
       throw new UnauthorizedException('User not found or nonce expired');
     }
 
-    try {
-      const message = this.prepareSigningMessage(user.nonce);
-      const recoveredAddress = verifyMessage(message, signature);
-      const isValid =
-        walletAddress.toLowerCase() === recoveredAddress.toLowerCase();
+    const message = this.prepareSigningMessage(user.nonce);
+    const isValid = this.verifySolanaSignature(message, signature, walletAddress);
 
-      if (!isValid) {
-        throw new UnauthorizedException('Invalid signature');
-      }
-    } catch (error) {
-      this.logger.error('Signature verification failed:', error);
+    if (!isValid) {
       throw new UnauthorizedException('Invalid signature');
     }
 

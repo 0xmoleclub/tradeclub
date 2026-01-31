@@ -11,7 +11,7 @@ import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { NonceQueryDto } from './dto/nonce-query.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Payload } from './auth.interface';
@@ -26,7 +26,7 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  @ApiOperation({ summary: 'Login with signature' })
+  @ApiOperation({ summary: 'Web3 Login with signature' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid signature or user not found' })
   login(@Body() data: LoginDto) {
@@ -61,7 +61,7 @@ export class AuthController {
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({ status: 200, description: 'Profile retrieved successfully' })
-  async getProfile(@CurrentUser('sub') userId: string) {
-    return this.authService.getProfile(userId);
+  async getProfile(@CurrentUser() user: Payload) {
+    return this.authService.getProfile(user.id);
   }
 }

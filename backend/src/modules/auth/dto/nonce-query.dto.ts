@@ -1,15 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEthereumAddress, IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, IsString, Matches } from 'class-validator';
 
 export class NonceQueryDto {
   @ApiProperty({
     type: String,
-    description: 'Wallet address',
-    example: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+    description: 'Solana wallet address (Base58)',
+    example: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
   })
   @IsNotEmpty()
-  @IsEthereumAddress()
-  @Transform(({ value }) => value?.toLowerCase())
+  @IsString()
+  @Matches(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/, {
+    message: 'Invalid Solana wallet address format',
+  })
+  @Transform(({ value }) => value?.trim())
   walletAddress: string;
 }
