@@ -54,9 +54,7 @@ function main() {
   const signatureBase58 = bs58.encode(signature);
 
   // Output
-  console.log('Wallet:', walletAddress);
-  console.log('Message:', message);
-  console.log('Signature:', signatureBase58);
+  console.log('{ \n  "walletAddress": "' + walletAddress + '", \n  "signature": "' + signatureBase58 + '"\n}');
   console.log('');
   console.log('curl:');
   console.log(`curl -X POST http://localhost:3002/api/auth/login \\\n  -H "Content-Type: application/json" \\\n  -d '{"walletAddress":"${walletAddress}","signature":"${signatureBase58}"}'`);
