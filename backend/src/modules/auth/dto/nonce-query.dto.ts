@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEthereumAddress, IsNotEmpty, IsString } from 'class-validator';
+import { IsEthereumAddress, IsNotEmpty } from 'class-validator';
 
-export class LoginDto {
+export class NonceQueryDto {
   @ApiProperty({
     type: String,
     description: 'Wallet address',
@@ -12,13 +12,4 @@ export class LoginDto {
   @IsEthereumAddress()
   @Transform(({ value }) => value?.toLowerCase())
   walletAddress: string;
-
-  @ApiProperty({
-    type: String,
-    description: 'Signature of the nonce message',
-    example: '0x...',
-  })
-  @IsNotEmpty()
-  @IsString()
-  signature: string;
 }

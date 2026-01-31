@@ -1,95 +1,85 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import { verifyMessage } from 'ethers';
 import { UsersService } from '../users/users.service';
-import { UtilsService } from '../../shared/utils/utils.service';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
-import { IJwtPayload } from '../../common/interfaces';
+import { JwtPayload } from './auth.interface';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
-    private usersService: UsersService,
     private jwtService: JwtService,
-    private configService: ConfigService,
-    private utilsService: UtilsService,
+    private usersService: UsersService,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.usersService.findByEmail(email);
-    if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
+  /**
+   * Prepare the message that user needs to sign
+   */
+  prepareSigningMessage(nonce: string): string {
+    return `Please sign this message to verify your address. Nonce: ${nonce}`;
+  }
 
-    const isPasswordValid = await this.utilsService.comparePassword(
-      password,
-      user.password,
+  /**
+   * Generate JWT token from payload
+   */
+  async generateToken(payload: JwtPayload): Promise<string> {
+    return this.jwtService.signAsync(payload);
+  }
+
+  /**
+   * Validate access token
+   */
+  async validateAccessToken(token: string): Promise<JwtPayload> {
+    return this.jwtService.verifyAsync<JwtPayload>(token);
+  }
+
+  /**
+   * Web3 Login with signature verification
+   */
+  async login(data: LoginDto) {
+    const { walletAddress, signature } = data;
+
+    const user = await this.usersService.findByWalletAddress(
+      walletAddress.toLowerCase(),
     );
 
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+    if (!user || !user.nonce) {
+      throw new UnauthorizedException('User not found or nonce expired');
     }
 
-    return this.usersService.findById(user.id);
-  }
+    try {
+      const message = this.prepareSigningMessage(user.nonce);
+      const recoveredAddress = verifyMessage(message, signature);
+      const isValid =
+        walletAddress.toLowerCase() === recoveredAddress.toLowerCase();
 
-  async login(loginDto: LoginDto) {
-    const user = await this.validateUser(loginDto.email, loginDto.password);
-    
-    const payload: IJwtPayload = {
+      if (!isValid) {
+        throw new UnauthorizedException('Invalid signature');
+      }
+    } catch (error) {
+      this.logger.error('Signature verification failed:', error);
+      throw new UnauthorizedException('Invalid signature');
+    }
+
+    // Clear nonce and update last login
+    const updatedUser = await this.usersService.loginSuccess(user.id);
+
+    const payload: JwtPayload = {
       sub: user.id,
-      email: user.email,
-      role: user.role,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get('jwt.refreshExpiration'),
-    });
-
-    return {
-      user,
-      accessToken,
-      refreshToken,
-    };
-  }
-
-  async register(registerDto: RegisterDto) {
-    const user = await this.usersService.create(registerDto);
-    
-    const payload: IJwtPayload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get('jwt.refreshExpiration'),
-    });
-
-    return {
-      user,
-      accessToken,
-      refreshToken,
-    };
-  }
-
-  async refreshToken(userId: string) {
-    const user = await this.usersService.findById(userId);
-    
-    const payload: IJwtPayload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
+      walletAddress: user.walletAddress,
     };
 
     return {
-      accessToken: this.jwtService.sign(payload),
+      accessToken: await this.generateToken(payload),
+      user: updatedUser,
     };
   }
 
+  /**
+   * Get user profile
+   */
   async getProfile(userId: string) {
     return this.usersService.findById(userId);
   }

@@ -1,24 +1,34 @@
-import { IsEmail, IsString, MinLength, IsEnum, IsOptional } from 'class-validator';
+import { IsEthereumAddress, IsString, IsOptional, MinLength, IsEnum } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { UserRole } from '../../../common/enums';
+import { Transform } from 'class-transformer';
+import { UserRole, UserStatus } from '../../../common/enums';
 
 export class CreateUserDto {
-  @ApiProperty({ example: 'user@example.com', description: 'User email' })
-  @IsEmail({}, { message: 'Please provide a valid email address' })
-  email: string;
+  @ApiProperty({
+    example: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+    description: 'Wallet address',
+  })
+  @IsEthereumAddress()
+  @Transform(({ value }) => value?.toLowerCase())
+  walletAddress: string;
 
-  @ApiProperty({ example: 'password123', description: 'User password', minLength: 6 })
-  @IsString()
-  @MinLength(6, { message: 'Password must be at least 6 characters long' })
-  password: string;
-
-  @ApiProperty({ example: 'John Doe', description: 'User full name' })
-  @IsString()
-  @MinLength(2, { message: 'Name must be at least 2 characters long' })
-  name: string;
-
-  @ApiPropertyOptional({ enum: UserRole, default: UserRole.USER, description: 'User role' })
+  @ApiPropertyOptional({ example: 'John Doe', description: 'User display name' })
   @IsOptional()
-  @IsEnum(UserRole, { message: 'Invalid role' })
+  @IsString()
+  @MinLength(2)
+  name?: string;
+
+  @ApiPropertyOptional({ example: 'https://example.com/avatar.png' })
+  @IsOptional()
+  avatar?: string;
+
+  @ApiPropertyOptional({ enum: UserRole, default: UserRole.USER })
+  @IsOptional()
+  @IsEnum(UserRole)
   role?: UserRole;
+
+  @ApiPropertyOptional({ enum: UserStatus, default: UserStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(UserStatus)
+  status?: UserStatus;
 }

@@ -23,8 +23,8 @@ import { HealthModule } from './modules/health/health.module';
       useFactory: () => ({
         throttlers: [
           {
-            ttl: 60000, // 1 minute
-            limit: 100, // 100 requests per minute
+            ttl: 60000,
+            limit: 100,
           },
         ],
       }),

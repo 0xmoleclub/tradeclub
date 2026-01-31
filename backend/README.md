@@ -1,16 +1,34 @@
-# TradeClub Backend API
+# TradeClub Web3 Backend API
 
-A modular NestJS backend API for TradeClub application.
+A modular NestJS backend API for TradeClub with Web3 signature-based authentication.
 
 ## Features
 
-- **Modular Architecture**: Clean separation of concerns with feature modules
-- **Authentication & Authorization**: JWT-based auth with role-based access control
-- **Database Integration**: TypeORM with PostgreSQL support
+- **Web3 Authentication**: Signature-based auth using ethers.js
+  - Nonce-based signature verification
+  - JWT token issuance after signature validation
+  - Automatic user creation on first login
+- **Modular Architecture**: Clean separation of concerns
+- **Database Integration**: TypeORM with PostgreSQL
 - **API Documentation**: Swagger/OpenAPI integration
-- **Security**: Helmet, CORS, rate limiting, and input validation
+- **Security**: Helmet, CORS, rate limiting, input validation
 - **Logging**: Winston logger with daily rotation
 - **Health Checks**: Kubernetes-ready health endpoints
+
+## Web3 Authentication Flow
+
+1. **Get Nonce**: `GET /api/auth/nonce?walletAddress=0x...`
+   - Returns a nonce and message to sign
+   - Creates user if wallet address doesn't exist
+
+2. **Sign Message**: User signs the message with their wallet
+   - Message format: `Please sign this message to verify your address. Nonce: {nonce}`
+
+3. **Login**: `POST /api/auth/login`
+   - Send wallet address and signature
+   - Returns JWT access token
+
+4. **Authenticated Requests**: Include `Authorization: Bearer {token}` header
 
 ## Project Structure
 
@@ -19,19 +37,10 @@ src/
 ├── app.module.ts              # Root application module
 ├── main.ts                    # Application entry point
 ├── config/                    # Configuration files
-│   ├── app.config.ts
-│   ├── database.config.ts
-│   ├── jwt.config.ts
-│   └── throttle.config.ts
 ├── database/                  # Database module
-│   └── database.module.ts
 ├── shared/                    # Shared services (global)
-│   ├── shared.module.ts
-│   ├── logger/
-│   ├── cache/
-│   └── utils/
 ├── common/                    # Common utilities
-│   ├── decorators/            # Custom decorators
+│   ├── decorators/            # @CurrentUser, @Public, @Roles
 │   ├── enums/                 # Enums
 │   ├── filters/               # Exception filters
 │   ├── guards/                # Auth guards
@@ -39,8 +48,15 @@ src/
 │   ├── interfaces/            # TypeScript interfaces
 │   └── pipes/                 # Custom pipes
 └── modules/                   # Feature modules
-    ├── auth/                  # Authentication module
+    ├── auth/                  # Web3 Auth module
+    │   ├── auth.service.ts    # Signature verification
+    │   ├── auth.controller.ts # Login & nonce endpoints
+    │   ├── strategies/        # JWT strategy
+    │   └── dto/               # Login & nonce DTOs
     ├── users/                 # Users module
+    │   ├── entities/user.entity.ts
+    │   ├── users.service.ts   # User CRUD & nonce management
+    │   └── users.controller.ts
     └── health/                # Health check module
 ```
 
@@ -55,6 +71,20 @@ cp .env.example .env
 
 # Update environment variables in .env
 ```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NODE_ENV` | Environment mode | `development` |
+| `PORT` | Application port | `3002` |
+| `DB_HOST` | Database host | `localhost` |
+| `DB_PORT` | Database port | `5432` |
+| `DB_USERNAME` | Database username | `postgres` |
+| `DB_PASSWORD` | Database password | `postgres` |
+| `DB_NAME` | Database name | `tradeclub` |
+| `JWT_SECRET` | JWT secret key | - |
+| `JWT_ACCESS_EXPIRATION` | Access token expiration | `1d` |
 
 ## Running the Application
 
@@ -77,11 +107,17 @@ http://localhost:3002/docs
 
 ## API Endpoints
 
-### Authentication
-- `POST /api/auth/register` - Register a new user
-- `POST /api/auth/login` - User login
-- `POST /api/auth/refresh` - Refresh access token
-- `GET /api/auth/me` - Get current user profile
+### Authentication (Web3)
+- `GET /api/auth/nonce?walletAddress=0x...` - Get nonce for signing
+- `POST /api/auth/login` - Login with signature
+  ```json
+  {
+    "walletAddress": "0x...",
+    "signature": "0x..."
+  }
+  ```
+- `GET /api/auth/check` - Validate JWT token (requires auth)
+- `GET /api/auth/me` - Get current user profile (requires auth)
 
 ### Users
 - `GET /api/users` - Get all users (Admin/Moderator only)
@@ -91,24 +127,32 @@ http://localhost:3002/docs
 - `DELETE /api/users/:id` - Delete a user (Admin only)
 
 ### Health
-- `GET /api/health` - Full health check
+- `GET /api/health` - Full health check (DB connectivity)
 - `GET /api/health/liveness` - Kubernetes liveness probe
-- `GET /api/health/readiness` - Kubernetes readiness probe
 
-## Environment Variables
+## Web3 Login Example
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NODE_ENV` | Environment mode | `development` |
-| `PORT` | Application port | `3002` |
-| `DB_HOST` | Database host | `localhost` |
-| `DB_PORT` | Database port | `5432` |
-| `DB_USERNAME` | Database username | `postgres` |
-| `DB_PASSWORD` | Database password | `postgres` |
-| `DB_NAME` | Database name | `tradeclub` |
-| `JWT_SECRET` | JWT secret key | - |
-| `JWT_ACCESS_EXPIRATION` | Access token expiration | `15m` |
-| `JWT_REFRESH_EXPIRATION` | Refresh token expiration | `7d` |
+```typescript
+// 1. Get nonce
+const { nonce, message } = await fetch(
+  '/api/auth/nonce?walletAddress=' + walletAddress
+).then(r => r.json());
+
+// 2. Sign message with wallet (e.g., ethers.js, wagmi)
+const signature = await signer.signMessage(message);
+
+// 3. Login
+const { accessToken, user } = await fetch('/api/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ walletAddress, signature })
+}).then(r => r.json());
+
+// 4. Use token for authenticated requests
+const profile = await fetch('/api/auth/me', {
+  headers: { 'Authorization': `Bearer ${accessToken}` }
+}).then(r => r.json());
+```
 
 ## Testing
 

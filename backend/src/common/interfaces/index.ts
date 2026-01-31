@@ -2,16 +2,14 @@ import { UserRole } from '../enums';
 
 export interface IJwtPayload {
   sub: string;
-  email: string;
-  role: UserRole;
+  walletAddress: string;
   iat?: number;
   exp?: number;
 }
 
 export interface IAuthUser {
   id: string;
-  email: string;
-  role: UserRole;
+  walletAddress: string;
 }
 
 export interface IApiResponse<T> {

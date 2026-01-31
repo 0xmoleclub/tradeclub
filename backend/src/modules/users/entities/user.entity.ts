@@ -4,8 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  BeforeInsert,
-  BeforeUpdate,
+  Index,
 } from 'typeorm';
 import { UserRole, UserStatus } from '../../../common/enums';
 
@@ -15,13 +14,14 @@ export class User {
   id: string;
 
   @Column({ type: 'varchar', length: 255, unique: true })
-  email: string;
+  @Index()
+  walletAddress: string;
 
-  @Column({ type: 'varchar', length: 255 })
-  password: string;
-
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   name: string;
+
+  @Column({ type: 'text', nullable: true })
+  avatar: string;
 
   @Column({
     type: 'enum',
@@ -37,6 +37,9 @@ export class User {
   })
   status: UserStatus;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  nonce: string;
+
   @Column({ type: 'timestamp', nullable: true })
   lastLoginAt: Date;
 
@@ -45,10 +48,4 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @BeforeInsert()
-  @BeforeUpdate()
-  emailToLowerCase() {
-    this.email = this.email.toLowerCase();
-  }
 }
