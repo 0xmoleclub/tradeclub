@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { AgentWallet, AgentWalletStatus } from '@prisma/client';
+import { Keypair } from '@solana/web3.js';
 import { CryptoService } from './crypto.service';
 import { UsersService } from '../../users/users.service';
 
@@ -38,16 +39,18 @@ export class AgentWalletsService {
     }
 
     // Generate new Solana keypair
-    const keypair = this.generateSolanaKeypair();
+    const keypair = Keypair.generate();
 
     // Encrypt secret key (64 bytes)
-    const encryptedSecretKey = this.cryptoService.encryptSecretKey(keypair.secretKey);
+    const encryptedSecretKey = this.cryptoService.encryptSecretKey(
+      Buffer.from(keypair.secretKey),
+    );
 
     // Create agent wallet record
     const agentWallet = await this.prisma.agentWallet.create({
       data: {
         userId,
-        publicKey: keypair.publicKey,
+        publicKey: keypair.publicKey.toBase58(),
         encryptedSecretKey,
         encryptionVersion: 'v1',
         isDelegated: false,
@@ -129,7 +132,7 @@ export class AgentWalletsService {
    * Decrypt and get secret key for signing transactions
    * Use with caution - only decrypt when needed for signing
    */
-  async getSecretKey(walletId: string): Promise<Buffer> {
+  async getSecretKey(walletId: string): Promise<Uint8Array> {
     const wallet = await this.prisma.agentWallet.findUnique({
       where: { id: walletId },
     });
@@ -139,25 +142,5 @@ export class AgentWalletsService {
     }
 
     return this.cryptoService.decryptSecretKey(wallet.encryptedSecretKey);
-  }
-
-  /**
-   * Generate a new Solana keypair
-   * TODO: Replace with actual @solana/web3.js implementation
-   */
-  private generateSolanaKeypair(): { publicKey: string; secretKey: Buffer } {
-    // Placeholder - will be replaced with actual Solana keypair generation
-    // const { Keypair } = require('@solana/web3.js');
-    // const keypair = Keypair.generate();
-    // return {
-    //   publicKey: keypair.publicKey.toBase58(),
-    //   secretKey: Buffer.from(keypair.secretKey), // 64 bytes
-    // };
-
-    // For now, return placeholder values
-    return {
-      publicKey: 'PLACEHOLDER_' + Date.now(),
-      secretKey: Buffer.alloc(64, 0),
-    };
   }
 }

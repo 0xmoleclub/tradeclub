@@ -10,8 +10,10 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AgentWalletsService } from '../services/agent-wallets.service';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
+import { Payload } from '../../auth/auth.interface';
+import { Public } from '../../../common/decorators/public.decorator';
 
 @ApiTags('Agent Wallets')
 @Controller('agent-wallets')
@@ -27,8 +29,8 @@ export class AgentWalletsController {
   })
   @ApiResponse({ status: 201, description: 'Agent wallet created successfully' })
   @ApiResponse({ status: 409, description: 'User already has an agent wallet' })
-  async createAgentWallet(@CurrentUser('sub') userId: string) {
-    return this.agentWalletsService.createAgentWallet(userId);
+  async createAgentWallet(@CurrentUser() user: Payload) {
+    return this.agentWalletsService.createAgentWallet(user.id);
   }
 
   @Get('me')
@@ -38,8 +40,8 @@ export class AgentWalletsController {
   })
   @ApiResponse({ status: 200, description: 'Agent wallet found' })
   @ApiResponse({ status: 404, description: 'No agent wallet found' })
-  async getMyAgentWallet(@CurrentUser('sub') userId: string) {
-    const wallet = await this.agentWalletsService.getAgentWalletByUserId(userId);
+  async getMyAgentWallet(@CurrentUser() user: Payload) {
+    const wallet = await this.agentWalletsService.getAgentWalletByUserId(user.id);
     if (!wallet) {
       return { message: 'No agent wallet found', wallet: null };
     }
