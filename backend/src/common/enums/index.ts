@@ -10,8 +10,3 @@ export enum UserStatus {
   SUSPENDED = 'suspended',
   PENDING = 'pending',
 }
-
-export enum OrderDirection {
-  ASC = 'ASC',
-  DESC = 'DESC',
-}
