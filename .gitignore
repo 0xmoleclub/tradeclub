@@ -6,3 +6,4 @@ artifacts/
 .env.local
 typechain-types/
 .next
+.agent/
