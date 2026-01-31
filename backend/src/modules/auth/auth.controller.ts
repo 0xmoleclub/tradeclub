@@ -26,7 +26,7 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  @ApiOperation({ summary: 'Web3 Login with signature' })
+  @ApiOperation({ summary: 'Login with wallet signature' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid signature or user not found' })
   login(@Body() data: LoginDto) {

@@ -38,7 +38,7 @@ describe('AppController (e2e)', () => {
       });
   });
 
-  describe('Auth (Web3 - Solana)', () => {
+  describe('Auth (Solana)', () => {
     it('/auth/nonce (GET) - should return nonce for Solana wallet', () => {
       return request(app.getHttpServer())
         .get('/api/auth/nonce?walletAddress=7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU')

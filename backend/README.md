@@ -1,64 +1,55 @@
-# TradeClub Web3 Backend API
+# TradeClub Backend API
 
-A modular NestJS backend API for TradeClub with Web3 signature-based authentication.
+A NestJS backend API for TradeClub with Solana wallet authentication and agent wallet delegation.
 
 ## Features
 
-- **Web3 Authentication**: Signature-based auth using ethers.js
+- **Wallet Authentication**: Signature-based auth using Solana
   - Nonce-based signature verification
   - JWT token issuance after signature validation
   - Automatic user creation on first login
-- **Modular Architecture**: Clean separation of concerns
-- **Database Integration**: TypeORM with PostgreSQL
-- **API Documentation**: Swagger/OpenAPI integration
-- **Security**: Helmet, CORS, rate limiting, input validation
-- **Logging**: Winston logger with daily rotation
-- **Health Checks**: Kubernetes-ready health endpoints
+- **Agent Wallet**: Platform-managed wallet for Drift Protocol delegation
+  - User creates agent wallet via API
+  - User delegates trading authority on Drift Protocol
+  - Funds stay in user's wallet - agent only has trading authority
+- **Prisma ORM**: PostgreSQL with type-safe queries
+- **API Documentation**: Swagger/OpenAPI
+- **Security**: Helmet, CORS, rate limiting, AES-256-GCM encryption
 
-## Web3 Authentication Flow
-
-1. **Get Nonce**: `GET /api/auth/nonce?walletAddress=0x...`
-   - Returns a nonce and message to sign
-   - Creates user if wallet address doesn't exist
-
-2. **Sign Message**: User signs the message with their wallet
-   - Message format: `Please sign this message to verify your address. Nonce: {nonce}`
-
-3. **Login**: `POST /api/auth/login`
-   - Send wallet address and signature
-   - Returns JWT access token
-
-4. **Authenticated Requests**: Include `Authorization: Bearer {token}` header
-
-## Project Structure
+## Architecture
 
 ```
-src/
-├── app.module.ts              # Root application module
-├── main.ts                    # Application entry point
-├── config/                    # Configuration files
-├── database/                  # Database module
-├── shared/                    # Shared services (global)
-├── common/                    # Common utilities
-│   ├── decorators/            # @CurrentUser, @Public, @Roles
-│   ├── enums/                 # Enums
-│   ├── filters/               # Exception filters
-│   ├── guards/                # Auth guards
-│   ├── interceptors/          # Interceptors
-│   ├── interfaces/            # TypeScript interfaces
-│   └── pipes/                 # Custom pipes
-└── modules/                   # Feature modules
-    ├── auth/                  # Web3 Auth module
-    │   ├── auth.service.ts    # Signature verification
-    │   ├── auth.controller.ts # Login & nonce endpoints
-    │   ├── strategies/        # JWT strategy
-    │   └── dto/               # Login & nonce DTOs
-    ├── users/                 # Users module
-    │   ├── entities/user.entity.ts
-    │   ├── users.service.ts   # User CRUD & nonce management
-    │   └── users.controller.ts
-    └── health/                # Health check module
+User Wallet (funds here)
+    ↓
+  Delegates trading authority to
+    ↓
+Agent Wallet (platform-managed)
+    ↓
+  Trades on
+    ↓
+Drift Protocol
 ```
+
+## Database Schema (Prisma)
+
+### User
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `walletAddress` | User's Solana wallet (unique) |
+| `nonce` | Auth nonce |
+| `role`, `status` | User management |
+| `agentWallet` | Optional 1:1 relation |
+
+### AgentWallet
+| Field | Description |
+|-------|-------------|
+| `id` | UUID |
+| `userId` | FK to user |
+| `publicKey` | Solana public key |
+| `encryptedSecretKey` | AES-256-GCM encrypted (64 bytes) |
+| `isDelegated` | Delegated on Drift? |
+| `subaccountIndex` | Drift subaccount |
 
 ## Installation
 
@@ -66,25 +57,27 @@ src/
 # Install dependencies
 npm install
 
+# Generate Prisma client
+npm run db:generate
+
+# Run migrations
+npm run db:migrate
+
 # Copy environment file
 cp .env.example .env
 
-# Update environment variables in .env
+# Update DATABASE_URL and WALLET_ENCRYPTION_KEY in .env
 ```
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `NODE_ENV` | Environment mode | `development` |
+| `DATABASE_URL` | PostgreSQL connection string | - |
 | `PORT` | Application port | `3002` |
-| `DB_HOST` | Database host | `localhost` |
-| `DB_PORT` | Database port | `5432` |
-| `DB_USERNAME` | Database username | `postgres` |
-| `DB_PASSWORD` | Database password | `postgres` |
-| `DB_NAME` | Database name | `tradeclub` |
 | `JWT_SECRET` | JWT secret key | - |
-| `JWT_ACCESS_EXPIRATION` | Access token expiration | `1d` |
+| `WALLET_ENCRYPTION_KEY` | AES-256 encryption key | - |
+| `SOLANA_RPC_URL` | Solana RPC endpoint | `https://api.devnet.solana.com` |
 
 ## Running the Application
 
@@ -99,73 +92,80 @@ npm run start:prod
 
 ## API Documentation
 
-Once the application is running, Swagger documentation is available at:
+Swagger docs available at: `http://localhost:3002/docs`
 
-```
-http://localhost:3002/docs
-```
-
-## API Endpoints
-
-### Authentication (Web3)
-- `GET /api/auth/nonce?walletAddress=0x...` - Get nonce for signing
-- `POST /api/auth/login` - Login with signature
+### Authentication
+- `GET /api/v1/auth/nonce?walletAddress=...` - Get nonce for signing
+- `POST /api/v1/auth/login` - Login with signature
   ```json
   {
-    "walletAddress": "0x...",
-    "signature": "0x..."
+    "walletAddress": "7xKX...",
+    "signature": "5Hd..."
   }
   ```
-- `GET /api/auth/check` - Validate JWT token (requires auth)
-- `GET /api/auth/me` - Get current user profile (requires auth)
+- `GET /api/v1/auth/check` - Validate JWT token (requires auth)
+- `GET /api/v1/auth/me` - Get current user profile (requires auth)
+
+### Agent Wallet
+- `POST /api/v1/agent-wallets` - Create agent wallet (authenticated)
+- `GET /api/v1/agent-wallets/me` - Get my agent wallet
+- `PATCH /api/v1/agent-wallets/:id/delegate` - Mark as delegated
 
 ### Users
-- `GET /api/users` - Get all users (Admin/Moderator only)
-- `GET /api/users/:id` - Get user by ID
-- `POST /api/users` - Create a new user (Admin only)
-- `PATCH /api/users/:id` - Update a user
-- `DELETE /api/users/:id` - Delete a user (Admin only)
+- `GET /api/v1/users` - Get all users (Admin/Moderator)
+- `GET /api/v1/users/:id` - Get user by ID
+- `PATCH /api/v1/users/:id` - Update user
 
 ### Health
-- `GET /api/health` - Full health check (DB connectivity)
-- `GET /api/health/liveness` - Kubernetes liveness probe
+- `GET /api/v1/health` - Health check
+- `GET /api/v1/health/liveness` - Kubernetes liveness probe
 
-## Web3 Login Example
+## Login Flow
 
 ```typescript
 // 1. Get nonce
 const { nonce, message } = await fetch(
-  '/api/auth/nonce?walletAddress=' + walletAddress
+  '/api/v1/auth/nonce?walletAddress=' + publicKey.toBase58()
 ).then(r => r.json());
 
-// 2. Sign message with wallet (e.g., ethers.js, wagmi)
-const signature = await signer.signMessage(message);
+// 2. Sign message with wallet (e.g., Phantom)
+const encoded = new TextEncoder().encode(message);
+const signed = await window.solana.signMessage(encoded);
+const signature = bs58.encode(signed.signature);
 
 // 3. Login
-const { accessToken, user } = await fetch('/api/auth/login', {
+const { accessToken, user } = await fetch('/api/v1/auth/login', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ walletAddress, signature })
-}).then(r => r.json());
-
-// 4. Use token for authenticated requests
-const profile = await fetch('/api/auth/me', {
-  headers: { 'Authorization': `Bearer ${accessToken}` }
+  body: JSON.stringify({ walletAddress: publicKey.toBase58(), signature })
 }).then(r => r.json());
 ```
 
-## Testing
+## Agent Wallet Flow
+
+1. User logs in with wallet auth
+2. User creates agent wallet: `POST /api/v1/agent-wallets`
+3. Backend generates Solana keypair, encrypts secret key
+4. User delegates on Drift Protocol UI (using agent wallet public key)
+5. User calls `PATCH /api/v1/agent-wallets/:id/delegate` to mark as delegated
+6. Agent wallet can now trade on behalf of user
+
+## Testing Scripts
 
 ```bash
-# Unit tests
-npm run test
-
-# E2E tests
-npm run test:e2e
-
-# Test coverage
-npm run test:cov
+# Generate signature for testing (requires TEST_WALLET_SECRET_KEY in .env)
+npx tsx scripts/sign.ts <nonce>
+npx tsx scripts/sign.ts 478732
 ```
+
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run db:generate` | Generate Prisma client |
+| `npm run db:migrate` | Run database migrations |
+| `npm run db:push` | Push schema to database (dev) |
+| `npm run db:studio` | Open Prisma Studio (DB GUI) |
 
 ## License
 

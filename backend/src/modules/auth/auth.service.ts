@@ -69,7 +69,7 @@ export class AuthService {
   }
 
   /**
-   * Web3 Login with Solana signature verification
+   * Login with Solana signature verification
    */
   async login(data: LoginDto) {
     const { walletAddress, signature } = data;
