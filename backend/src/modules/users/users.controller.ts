@@ -17,12 +17,11 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums';
+import { User } from '@prisma/client';
 
 @ApiTags('Users')
 @Controller('users')
@@ -30,15 +29,6 @@ import { UserRole } from '../../common/enums';
 @ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
-
-  @Post()
-  @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Create a new user (Admin only)' })
-  @ApiResponse({ status: 201, description: 'User created successfully' })
-  @ApiResponse({ status: 409, description: 'Wallet address already exists' })
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
-  }
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
@@ -64,7 +54,7 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() updateUserDto: UpdateUserDto,
+    @Body() updateUserDto: Partial<User>,
   ) {
     return this.usersService.update(id, updateUserDto);
   }

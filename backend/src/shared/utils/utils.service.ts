@@ -1,24 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class UtilsService {
-  /**
-   * Hash a password using bcrypt
-   */
-  async hashPassword(password: string): Promise<string> {
-    const saltRounds = 10;
-    return bcrypt.hash(password, saltRounds);
-  }
-
-  /**
-   * Compare a password with a hash
-   */
-  async comparePassword(password: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(password, hash);
-  }
-
   /**
    * Generate a UUID v4
    */
