@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum AgentWalletStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Web3 Auth
+  walletAddress String    @unique
+  nonce         String?
+  lastLoginAt   DateTime?
+
+  // Profile
+  name   String?
+  avatar String?
+  role   UserRole   @default(USER)
+  status UserStatus @default(ACTIVE)
+
+  // Relations - Agent wallet is optional, created later
+  agentWallet AgentWallet?
+}
+
+model AgentWallet {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Solana Wallet
+  publicKey          String @unique
+  encryptedSecretKey String // Base64 encrypted secret key (full 64 bytes)
+
+  // Delegation
+  isDelegated     Boolean           @default(false)
+  delegatedAt     DateTime?
+  subaccountIndex Int               @default(0)
+  status          AgentWalletStatus @default(ACTIVE)
+
+  // Encryption
+  encryptionVersion String @default("v1")
+
+  @@index([userId])
+  @@index([publicKey])
+}
