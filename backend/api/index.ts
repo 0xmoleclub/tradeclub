@@ -1,4 +1,6 @@
 import 'tsconfig-paths/register';
+import path from 'path';
+import { register } from 'tsconfig-paths';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
@@ -11,6 +13,11 @@ import { LoggerService } from '../src/shared/logger/logger.service';
 import express from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
+
+register({
+  baseUrl: path.resolve(__dirname, '..'),
+  paths: require('../tsconfig.json').compilerOptions.paths,
+});
 
 // Express app instance for serverless
 const server = express();
