@@ -19,7 +19,7 @@ export const HeroSection = () => {
   return (
     <section className="relative min-h-screen pt-32 flex flex-col items-center justify-center overflow-hidden perspective-1000">
       {/* Cinematic Titles */}
-      <div className="relative z-20 text-center mb-12 mix-blend-difference" style={{ transform: `translate(${parallax.x}px, ${parallax.y}px)` }}>
+      <div className="relative z-20 text-center mb-12" style={{ transform: `translate(${parallax.x}px, ${parallax.y}px)` }}>
         {/* Volumetric Night Light */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-neon/20 blur-[120px] rounded-full pointer-events-none mix-blend-screen" />
 

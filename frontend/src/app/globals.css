@@ -29,6 +29,7 @@ body {
   color: var(--foreground);
   font-family: 'Inter', sans-serif;
   overflow-x: hidden;
+  cursor: auto !important; /* Force visible cursor */
 }
 
 /* --- TEXTURES --- */
@@ -119,4 +120,8 @@ body::before {
 ::selection {
   background: var(--color-neon);
   color: #fff;
+}
+
+.clip-path-slant {
+  clip-path: polygon(10% 0, 100% 0, 100% 100%, 0% 100%);
 }
