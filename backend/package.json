@@ -25,6 +25,9 @@
     "db:studio": "prisma studio",
     "db:push": "prisma db push"
   },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
     "@drift-labs/sdk": "2.157.0-beta.1",

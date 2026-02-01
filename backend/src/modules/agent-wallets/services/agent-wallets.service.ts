@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import { AgentWallet, AgentWalletStatus } from '@prisma/client';
+import type { AgentWallet } from '@prisma/client';
+import { AgentWalletStatus } from '@prisma/client';
 import { Keypair } from '@solana/web3.js';
 import { CryptoService } from './crypto.service';
 import { UsersService } from '../../users/users.service';
@@ -74,7 +79,9 @@ export class AgentWalletsService {
   /**
    * Get agent wallet by public key
    */
-  async getAgentWalletByPublicKey(publicKey: string): Promise<AgentWallet | null> {
+  async getAgentWalletByPublicKey(
+    publicKey: string,
+  ): Promise<AgentWallet | null> {
     return this.prisma.agentWallet.findUnique({
       where: { publicKey },
     });
