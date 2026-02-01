@@ -9,13 +9,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { LoggerService } from './shared/logger/logger.service';
 
-let cachedApp: any;
-
-export async function bootstrap() {
-  if (cachedApp) {
-    return cachedApp;
-  }
-
+async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
@@ -59,41 +53,30 @@ export async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter(logger));
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  // run development only
-  if (process.env.VERCEL !== '1') {
-    // Swagger documentation
-    const config = new DocumentBuilder()
-      .setTitle('TradeClub API')
-      .setDescription(
-        'The TradeClub API documentation with signature-based authentication',
-      )
-      .setVersion('1.0')
-      .addBearerAuth()
-      .build();
-    const document = SwaggerModule.createDocument(app, config);
+  // Swagger documentation
+  const config = new DocumentBuilder()
+    .setTitle('TradeClub API')
+    .setDescription(
+      'The TradeClub API documentation with signature-based authentication',
+    )
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('docs', app, document);
 
-    SwaggerModule.setup('docs', app, document);
+  const port = process.env.PORT || configService.get<number>('app.port', 3002);
 
-    const port = configService.get<number>('app.port', 3002);
-    await app.listen(port);
+  await app.listen(port);
 
-    logger.log(
-      `API is running on: http://localhost:${port}/${configService.get('app.apiPrefix', 'api')}`,
-      'Bootstrap',
-    );
-    logger.log(
-      `Swagger documentation available at: http://localhost:${port}/docs`,
-      'Bootstrap',
-    );
-  }
-
-  await app.init();
-  cachedApp = app.getHttpAdapter().getInstance(); // express instance
-
-  return cachedApp;
+  logger.log(
+    `API is running on: http://localhost:${port}/${configService.get('app.apiPrefix', 'api')}`,
+    'Bootstrap',
+  );
+  logger.log(
+    `Swagger documentation available at: http://localhost:${port}/docs`,
+    'Bootstrap',
+  );
 }
 
-// local dev
-if (process.env.VERCEL !== '1') {
-  bootstrap();
-}
+bootstrap();
