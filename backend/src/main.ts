@@ -56,7 +56,9 @@ async function bootstrap() {
   // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('TradeClub API')
-    .setDescription('The TradeClub API documentation with signature-based authentication')
+    .setDescription(
+      'The TradeClub API documentation with signature-based authentication',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -65,7 +67,9 @@ async function bootstrap() {
 
   const port = configService.get<number>('app.port', 3002);
 
-  await app.listen(port);
+  if (process.env.VERCEL !== '1') {
+    await app.listen(port);
+  }
 
   logger.log(
     `API is running on: http://localhost:${port}/${configService.get('app.apiPrefix', 'api')}`,
