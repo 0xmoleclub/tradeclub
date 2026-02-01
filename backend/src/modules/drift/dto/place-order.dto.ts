@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumberString, IsOptional, IsBoolean, IsInt, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsNumberString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  Min,
+} from 'class-validator';
 import { PositionDirection, OrderType } from '@drift-labs/sdk';
+import { OrderTypeEnum, PositionDirectionEnum } from '@/common/enums';
 
 export class PlaceOrderDto {
   @ApiProperty({
@@ -12,12 +20,12 @@ export class PlaceOrderDto {
   marketIndex: number;
 
   @ApiProperty({
-    enum: PositionDirection,
+    enum: PositionDirectionEnum,
     description: 'Order direction',
-    example: PositionDirection.LONG,
+    example: PositionDirectionEnum.LONG,
   })
-  @IsEnum(PositionDirection)
-  direction: PositionDirection;
+  @IsEnum(PositionDirectionEnum)
+  direction: PositionDirectionEnum;
 
   @ApiProperty({
     description: 'Base asset amount (in base token units)',
@@ -27,12 +35,12 @@ export class PlaceOrderDto {
   baseAssetAmount: string;
 
   @ApiProperty({
-    enum: OrderType,
+    enum: OrderTypeEnum,
     description: 'Order type',
-    example: OrderType.MARKET,
+    example: OrderTypeEnum.MARKET,
   })
-  @IsEnum(OrderType)
-  orderType: OrderType;
+  @IsEnum(OrderTypeEnum)
+  orderType: OrderTypeEnum;
 
   @ApiPropertyOptional({
     description: 'Limit price (required for limit orders)',

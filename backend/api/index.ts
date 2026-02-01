@@ -21,13 +21,9 @@ async function bootstrap(): Promise<express.Express> {
     return cachedApp;
   }
 
-  const app = await NestFactory.create(
-    AppModule,
-    new ExpressAdapter(server),
-    {
-      bufferLogs: true,
-    },
-  );
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(server), {
+    bufferLogs: true,
+  });
 
   const configService = app.get(ConfigService);
   const logger = app.get(LoggerService);
@@ -69,7 +65,10 @@ async function bootstrap(): Promise<express.Express> {
   app.useGlobalInterceptors(new TransformInterceptor());
 
   // Swagger documentation (only in dev/non-production if needed)
-  if (process.env.ENABLE_SWAGGER === 'true' || process.env.NODE_ENV !== 'production') {
+  if (
+    process.env.ENABLE_SWAGGER === 'true' ||
+    process.env.NODE_ENV !== 'production'
+  ) {
     const config = new DocumentBuilder()
       .setTitle('TradeClub API')
       .setDescription('The TradeClub API documentation')
@@ -82,9 +81,9 @@ async function bootstrap(): Promise<express.Express> {
 
   await app.init();
   cachedApp = server;
-  
+
   logger.log('Serverless app initialized', 'Bootstrap');
-  
+
   return cachedApp;
 }
 

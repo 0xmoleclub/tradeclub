@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNumberString, IsOptional, IsBoolean, IsInt, Min } from 'class-validator';
 import { PositionDirection } from '@drift-labs/sdk';
+import { PositionDirectionEnum } from '@/common/enums';
 
 export class PlaceTpSlDto {
   @ApiProperty({
@@ -12,12 +13,12 @@ export class PlaceTpSlDto {
   marketIndex: number;
 
   @ApiProperty({
-    enum: PositionDirection,
+    enum: PositionDirectionEnum,
     description: 'Order direction (opposite of position)',
-    example: PositionDirection.SHORT,
+    example: PositionDirectionEnum.SHORT,
   })
-  @IsEnum(PositionDirection)
-  direction: PositionDirection;
+  @IsEnum(PositionDirectionEnum)
+  direction: PositionDirectionEnum;
 
   @ApiProperty({
     description: 'Base asset amount to close (in base token units)',
