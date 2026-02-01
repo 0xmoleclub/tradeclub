@@ -10,6 +10,7 @@ import { LoggerService } from '../src/shared/logger/logger.service';
 import express from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
+import 'tsconfig-paths/register';
 
 // Express app instance for serverless
 const server = express();
