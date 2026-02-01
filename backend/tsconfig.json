@@ -1,4 +1,6 @@
 {
+  "include": ["src/**/*", "api/**/*", "prisma/**/*"],
+  "exclude": ["node_modules", "dist"],
   "compilerOptions": {
     "ignoreDeprecations": "5.0",
     "module": "commonjs",
