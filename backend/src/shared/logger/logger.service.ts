@@ -23,19 +23,21 @@ export class LoggerService implements NestLoggerService {
         new winston.transports.Console({
           format: winston.format.combine(
             winston.format.colorize(),
-            winston.format.printf(({ level, message, timestamp, context }) => {
-              return `[${timestamp}] [${context || 'Application'}] ${level}: ${message}`;
-            }),
+            winston.format.printf(
+              ({ level, message, timestamp, context }: any) => {
+                return `[${timestamp}] [${context || 'Application'}] ${level}: ${message}`;
+              },
+            ),
           ),
         }),
-        // File transports
-        new winston.transports.File({
-          filename: 'logs/application.log',
-        }),
-        new winston.transports.File({
-          filename: 'logs/error.log',
-          level: 'error',
-        }),
+        // // File transports
+        // new winston.transports.File({
+        //   filename: 'logs/application.log',
+        // }),
+        // new winston.transports.File({
+        //   filename: 'logs/error.log',
+        //   level: 'error',
+        // }),
       ],
     });
   }

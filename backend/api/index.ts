@@ -22,9 +22,9 @@ register({
 // Express app instance for serverless
 const server = express();
 
-let cachedApp: express.Express;
+let cachedApp: any;
 
-async function bootstrap(): Promise<express.Express> {
+async function bootstrap(): Promise<any> {
   if (cachedApp) {
     return cachedApp;
   }
