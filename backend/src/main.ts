@@ -9,7 +9,13 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { LoggerService } from './shared/logger/logger.service';
 
-async function bootstrap() {
+let cachedApp: any;
+
+export async function bootstrap() {
+  if (cachedApp) {
+    return cachedApp;
+  }
+
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
@@ -53,8 +59,7 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter(logger));
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  const port = configService.get<number>('app.port', 3002);
-
+  // run development only
   if (process.env.VERCEL !== '1') {
     // Swagger documentation
     const config = new DocumentBuilder()
@@ -69,17 +74,26 @@ async function bootstrap() {
 
     SwaggerModule.setup('docs', app, document);
 
+    const port = configService.get<number>('app.port', 3002);
     await app.listen(port);
+
+    logger.log(
+      `API is running on: http://localhost:${port}/${configService.get('app.apiPrefix', 'api')}`,
+      'Bootstrap',
+    );
+    logger.log(
+      `Swagger documentation available at: http://localhost:${port}/docs`,
+      'Bootstrap',
+    );
   }
 
-  logger.log(
-    `API is running on: http://localhost:${port}/${configService.get('app.apiPrefix', 'api')}`,
-    'Bootstrap',
-  );
-  logger.log(
-    `Swagger documentation available at: http://localhost:${port}/docs`,
-    'Bootstrap',
-  );
+  await app.init();
+  cachedApp = app.getHttpAdapter().getInstance(); // express instance
+
+  return cachedApp;
 }
 
-bootstrap();
+// local dev
+if (process.env.VERCEL !== '1') {
+  bootstrap();
+}
