@@ -1,11 +1,12 @@
 {
   "version": 2,
   "name": "tradeclub-backend",
-  "functions": {
-    "api/index.js": {
-      "runtime": "@vercel/node@3"
+  "builds": [
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node"
     }
-  },
+  ],
   "routes": [
     {
       "src": "/(.*)",
