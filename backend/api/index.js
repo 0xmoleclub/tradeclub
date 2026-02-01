@@ -1,3 +1,4 @@
+// wrapper serverless function for vercel deployment
 import { bootstrap } from '../dist/main';
 
 let server;
