@@ -53,21 +53,22 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter(logger));
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  // Swagger documentation
-  const config = new DocumentBuilder()
-    .setTitle('TradeClub API')
-    .setDescription(
-      'The TradeClub API documentation with signature-based authentication',
-    )
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
-
   const port = configService.get<number>('app.port', 3002);
 
   if (process.env.VERCEL !== '1') {
+    // Swagger documentation
+    const config = new DocumentBuilder()
+      .setTitle('TradeClub API')
+      .setDescription(
+        'The TradeClub API documentation with signature-based authentication',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+
+    SwaggerModule.setup('docs', app, document);
+
     await app.listen(port);
   }
 
