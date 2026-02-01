@@ -27,8 +27,7 @@ export interface ModifyOrderParams {
 }
 
 export interface DepositParams {
-  marketIndex: number;
-  amount: BN;
+  amount: string; // USD amount (e.g., "5" for $5)
   reduceOnly?: boolean;
 }
 

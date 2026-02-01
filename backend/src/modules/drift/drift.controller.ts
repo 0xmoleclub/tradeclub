@@ -43,6 +43,16 @@ export class DriftController {
     return { info };
   }
 
+  @Get('account/status')
+  @ApiOperation({
+    summary: 'Get account activation status',
+    description: 'Returns activation status, minimum deposit required, and wallet balances',
+  })
+  async getAccountStatus(@CurrentUser() user: Payload) {
+    const status = await this.driftService.getAccountStatus(user.id);
+    return status;
+  }
+
   @Post('account/initialize')
   @ApiOperation({
     summary: 'Initialize Drift account',
@@ -196,17 +206,23 @@ export class DriftController {
   @Post('deposit')
   @ApiOperation({
     summary: 'Deposit collateral',
-    description: 'Deposit USDC or other collateral into Drift account',
+    description: 'Deposit USDC or SOL (auto-swapped to USDC) into Drift account. Minimum $5. First deposit activates the account.',
   })
   async deposit(@CurrentUser() user: Payload, @Body() dto: DepositDto) {
     const driftClient = await this.driftService.initializeForUser(user.id);
-    const txSig = await this.driftService.deposit(driftClient, {
-      marketIndex: dto.marketIndex,
-      amount: new BN(dto.amount),
+    const result = await this.driftService.deposit(driftClient, user.id, {
+      paymentMethod: dto.paymentMethod,
+      amount: dto.amount,
       reduceOnly: dto.reduceOnly,
     });
     await driftClient.unsubscribe();
-    return { success: true, signature: txSig };
+    return {
+      success: true,
+      signature: result.signature,
+      swapSignature: result.swapSignature,
+      isFirstDeposit: result.isFirstDeposit,
+      depositedAmount: result.depositedAmount,
+    };
   }
 
   @Post('withdraw')

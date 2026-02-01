@@ -22,6 +22,8 @@ import {
 import { Connection, Keypair, PublicKey, Commitment } from '@solana/web3.js';
 import { PrismaService } from '../../../database/prisma.service';
 import { AgentWalletsService } from '../../agent-wallets/services/agent-wallets.service';
+import { JupiterService } from './jupiter.service';
+import { PaymentMethod } from '../dto/deposit.dto';
 import {
   PlaceOrderParams,
   CancelOrderParams,
@@ -43,6 +45,7 @@ export class DriftService implements OnModuleInit {
     private configService: ConfigService,
     private prisma: PrismaService,
     private agentWalletsService: AgentWalletsService,
+    private jupiterService: JupiterService,
   ) {
     this.isDevnet = this.configService.get('SOLANA_NETWORK', 'devnet') === 'devnet';
     const rpcUrl = this.configService.get<string>('SOLANA_RPC_URL', 'https://api.devnet.solana.com');
@@ -161,6 +164,57 @@ export class DriftService implements OnModuleInit {
       isLiquidatable: (user.canBeLiquidated() as any).liquidatable === true,
       settledPerpPnl: user.getUnrealizedPNL().toString(),
       numberOfSubAccounts: 1, // Simplified
+    };
+  }
+
+  /**
+   * Get account activation status and wallet balances
+   */
+  async getAccountStatus(userId: string): Promise<{
+    isActivated: boolean;
+    activatedAt: Date | null;
+    minDepositUsd: number;
+    agentWallet: {
+      publicKey: string;
+      solBalance: number;
+      usdcBalance: number;
+    } | null;
+    hasDriftAccount: boolean;
+  }> {
+    const agentWallet = await this.agentWalletsService.getAgentWalletByUserId(userId);
+    
+    if (!agentWallet) {
+      return {
+        isActivated: false,
+        activatedAt: null,
+        minDepositUsd: this.jupiterService.getMinDepositUsdc(),
+        agentWallet: null,
+        hasDriftAccount: false,
+      };
+    }
+
+    const publicKey = new PublicKey(agentWallet.publicKey);
+    
+    // Get balances
+    const [solBalance, usdcBalance] = await Promise.all([
+      this.jupiterService.getSolBalance(publicKey),
+      this.jupiterService.getUsdcBalance(publicKey),
+    ]);
+
+    // Check if Drift account exists (simplified - would need driftClient)
+    // For now, we assume if activated, Drift account exists
+    const hasDriftAccount = agentWallet.isActivated;
+
+    return {
+      isActivated: agentWallet.isActivated,
+      activatedAt: agentWallet.activatedAt,
+      minDepositUsd: this.jupiterService.getMinDepositUsdc(),
+      agentWallet: {
+        publicKey: agentWallet.publicKey,
+        solBalance,
+        usdcBalance,
+      },
+      hasDriftAccount,
     };
   }
 
@@ -377,32 +431,102 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
-   * Deposit collateral
+   * Deposit collateral with payment method handling
+   * - USDC: Direct deposit
+   * - SOL: Swap to USDC via Jupiter, then deposit
+   * Minimum deposit: $5
+   * First deposit activates the account
    */
   async deposit(
     driftClient: DriftClient,
-    params: DepositParams,
-  ): Promise<string> {
+    userId: string,
+    params: DepositParams & { paymentMethod: PaymentMethod },
+  ): Promise<{
+    signature: string;
+    swapSignature?: string;
+    isFirstDeposit: boolean;
+    depositedAmount: string;
+  }> {
+    const MIN_DEPOSIT_USD = 5;
+    const depositAmountUsd = Number(params.amount);
+
+    // Validate minimum deposit
+    if (depositAmountUsd < MIN_DEPOSIT_USD) {
+      throw new Error(`Minimum deposit is $${MIN_DEPOSIT_USD}`);
+    }
+
+    // Get agent wallet to check activation status
+    const agentWallet = await this.agentWalletsService.getAgentWalletByUserId(userId);
+    if (!agentWallet) {
+      throw new Error('Agent wallet not found');
+    }
+
+    // Check/initialize Drift account if needed
     const user = driftClient.getUser();
     const authority = user.getUserAccount().authority;
-    
-    // Get associated token account for the collateral mint
-    // For USDC (marketIndex 0), this is the USDC token account
+    const isFirstDeposit = !agentWallet.isActivated;
+
+    let swapSignature: string | undefined;
+
+    // Handle payment method
+    if (params.paymentMethod === PaymentMethod.SOL) {
+      // Swap SOL to exact USDC amount
+      this.logger.log(`Swapping SOL to ${depositAmountUsd} USDC for deposit`);
+      const swapResult = await this.jupiterService.swapSolToExactUsdc(
+        agentWallet.publicKey,
+        depositAmountUsd,
+      );
+      swapSignature = swapResult.signature;
+      this.logger.log(`Swap completed: ${swapSignature}`);
+    } else {
+      // Check USDC balance
+      const usdcBalance = await this.jupiterService.getUsdcBalance(authority);
+      if (usdcBalance < depositAmountUsd) {
+        throw new Error(
+          `Insufficient USDC balance. Need $${depositAmountUsd}, have $${usdcBalance.toFixed(2)}`,
+        );
+      }
+    }
+
+    // Convert USD amount to USDC base units (6 decimals)
+    const usdcAmount = new BN(depositAmountUsd * 1_000_000);
+
+    // Get USDC token account
     const tokenAccount = await this.getAssociatedTokenAccount(
       driftClient,
-      params.marketIndex,
+      0, // USDC spot market index
       authority,
     );
-    
+
+    // Deposit to Drift
     const txSig = await driftClient.deposit(
-      params.amount,
-      params.marketIndex,
+      usdcAmount,
+      0, // USDC market index
       tokenAccount,
       undefined, // subAccountId
       params.reduceOnly,
     );
-    this.logger.log(`Deposited ${params.amount} to market ${params.marketIndex}: ${txSig}`);
-    return txSig;
+
+    this.logger.log(`Deposited ${depositAmountUsd} USDC to Drift: ${txSig}`);
+
+    // Mark account as activated on first deposit
+    if (isFirstDeposit) {
+      await this.prisma.agentWallet.update({
+        where: { userId },
+        data: {
+          isActivated: true,
+          activatedAt: new Date(),
+        },
+      });
+      this.logger.log(`Account activated for user ${userId}`);
+    }
+
+    return {
+      signature: txSig,
+      swapSignature,
+      isFirstDeposit,
+      depositedAmount: usdcAmount.toString(),
+    };
   }
 
   /**

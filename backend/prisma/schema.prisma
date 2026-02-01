@@ -65,6 +65,13 @@ model AgentWallet {
   subaccountIndex Int               @default(0)
   status          AgentWalletStatus @default(ACTIVE)
 
+  // Account activation tracking
+  isActivated Boolean   @default(false)
+  activatedAt DateTime?
+
+  // Gas balance tracking (SOL) - cached from blockchain
+  gasBalance String @default("0") // Stored as string to handle big numbers (lamports)
+
   // Encryption
   encryptionVersion String @default("v1")
 

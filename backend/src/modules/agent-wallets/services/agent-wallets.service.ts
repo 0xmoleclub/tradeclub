@@ -143,4 +143,14 @@ export class AgentWalletsService {
 
     return this.cryptoService.decryptSecretKey(wallet.encryptedSecretKey);
   }
+
+  /**
+   * Update cached gas balance (SOL)
+   */
+  async updateGasBalance(walletId: string, balance: string): Promise<void> {
+    await this.prisma.agentWallet.update({
+      where: { id: walletId },
+      data: { gasBalance: balance },
+    });
+  }
 }

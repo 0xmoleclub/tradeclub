@@ -1,20 +1,27 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsNumberString, IsOptional, IsBoolean, Min } from 'class-validator';
+import { IsInt, IsNumberString, IsOptional, IsBoolean, IsEnum, Min } from 'class-validator';
+
+export enum PaymentMethod {
+  USDC = 'USDC',
+  SOL = 'SOL',
+}
 
 export class DepositDto {
   @ApiProperty({
-    description: 'Market index for collateral (0 for USDC spot market)',
-    example: 0,
+    enum: PaymentMethod,
+    description: 'Payment method - USDC (direct) or SOL (auto-swapped to USDC)',
+    example: PaymentMethod.USDC,
   })
-  @IsInt()
-  @Min(0)
-  marketIndex: number;
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
 
   @ApiProperty({
-    description: 'Amount to deposit (in token units, including decimals)',
-    example: '1000000000', // 1000 USDC with 6 decimals
+    description: 'Amount to deposit in USD (minimum $5). If paying with SOL, this amount of USDC will be received after swap.',
+    example: '5',
+    minimum: 5,
   })
   @IsNumberString()
+  @Min(5)
   amount: string;
 
   @ApiPropertyOptional({
