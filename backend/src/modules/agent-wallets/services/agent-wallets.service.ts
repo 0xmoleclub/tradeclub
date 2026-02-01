@@ -4,8 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import type { AgentWallet } from '@prisma/client';
-import { AgentWalletStatus } from '@prisma/client';
+import { AgentWallet, AgentWalletStatus } from '@prisma/client';
 import { Keypair } from '@solana/web3.js';
 import { CryptoService } from './crypto.service';
 import { UsersService } from '../../users/users.service';
