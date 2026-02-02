@@ -69,7 +69,6 @@ GET  /api/v1/drift/account/status              # Check status
 ```http
 POST /api/v1/drift/order/place/market  # Place market order
 POST /api/v1/drift/order/place/limit   # Place limit order
-POST /api/v1/drift/order/place         # Place order (generic)
 POST /api/v1/drift/order/cancel        # Cancel order
 POST /api/v1/drift/orders/cancel-all   # Cancel all
 GET  /api/v1/drift/positions           # Get positions

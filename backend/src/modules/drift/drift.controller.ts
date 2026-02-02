@@ -19,8 +19,8 @@ import { AgentWalletsService } from '../agent-wallets/services/agent-wallets.ser
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Payload } from '../auth/auth.interface';
-import { PlaceOrderDto, MarketOrderDto, LimitOrderDto, PlaceTpSlDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
-import { PositionDirection, OrderType, BN } from '@drift-labs/sdk';
+import { MarketOrderDto, LimitOrderDto, PlaceTpSlDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
+import { PositionDirection, BN } from '@drift-labs/sdk';
 import { PublicKey } from '@solana/web3.js';
 
 @ApiTags('Drift Trading')
@@ -270,34 +270,6 @@ export class DriftController {
       // Return empty array instead of error
       console.error('Orders error:', error.message);
       return { orders: [] };
-    }
-  }
-
-  @Post('order/place')
-  @ApiOperation({
-    summary: 'Place order (generic)',
-    description: 'Place a new perpetual order (market or limit). Consider using /order/place/market or /order/place/limit instead.',
-  })
-  @ApiResponse({ status: 200, description: 'Order placed' })
-  async placeOrder(@CurrentUser() user: Payload, @Body() dto: PlaceOrderDto) {
-    try {
-      const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
-
-      const txSig = await this.driftService.placeOrder(driftClient, {
-        marketIndex: dto.marketIndex,
-        direction: dto.direction as PositionDirection,
-        baseAssetAmount: new BN(dto.baseAssetAmount),
-        orderType: dto.orderType as OrderType,
-        price: dto.price ? new BN(dto.price) : undefined,
-        triggerPrice: dto.triggerPrice ? new BN(dto.triggerPrice) : undefined,
-        reduceOnly: dto.reduceOnly,
-        postOnly: dto.postOnly,
-      });
-
-      await driftClient.unsubscribe();
-      return { success: true, signature: txSig };
-    } catch (error) {
-      return this.handleOrderError(error);
     }
   }
 
