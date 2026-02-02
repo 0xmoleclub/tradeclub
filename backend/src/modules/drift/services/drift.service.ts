@@ -580,6 +580,70 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
+   * Place a market order
+   * Simple helper for market orders
+   */
+  async placeMarketOrder(
+    driftClient: DriftClient,
+    params: {
+      marketIndex: number;
+      direction: PositionDirection;
+      baseAssetAmount: BN;
+      reduceOnly?: boolean;
+    },
+  ): Promise<string> {
+    const optionalParams = getMarketOrderParams({
+      marketIndex: params.marketIndex,
+      direction: params.direction,
+      baseAssetAmount: params.baseAssetAmount,
+      reduceOnly: params.reduceOnly,
+    });
+
+    const orderParams = getOrderParams(optionalParams, {
+      marketType: MarketType.PERP,
+    });
+
+    const txSig = await driftClient.placePerpOrder(orderParams);
+    this.logger.log(`Placed market order: ${txSig}`);
+    
+    return txSig;
+  }
+
+  /**
+   * Place a limit order
+   * Simple helper for limit orders
+   */
+  async placeLimitOrder(
+    driftClient: DriftClient,
+    params: {
+      marketIndex: number;
+      direction: PositionDirection;
+      baseAssetAmount: BN;
+      price: BN;
+      reduceOnly?: boolean;
+      postOnly?: boolean;
+    },
+  ): Promise<string> {
+    const optionalParams = getLimitOrderParams({
+      marketIndex: params.marketIndex,
+      direction: params.direction,
+      baseAssetAmount: params.baseAssetAmount,
+      price: params.price,
+      reduceOnly: params.reduceOnly,
+      postOnly: params.postOnly,
+    });
+
+    const orderParams = getOrderParams(optionalParams, {
+      marketType: MarketType.PERP,
+    });
+
+    const txSig = await driftClient.placePerpOrder(orderParams);
+    this.logger.log(`Placed limit order: ${txSig}`);
+    
+    return txSig;
+  }
+
+  /**
    * Place Take Profit or Stop Loss order
    * Simplified helper for TP/SL orders
    */

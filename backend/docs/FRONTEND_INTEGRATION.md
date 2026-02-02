@@ -67,13 +67,15 @@ GET  /api/v1/drift/account/status              # Check status
 
 ### 4. Trading (requires delegation)
 ```http
-POST /api/v1/drift/order/place       # Place order
-POST /api/v1/drift/order/cancel      # Cancel order
-POST /api/v1/drift/orders/cancel-all # Cancel all
-GET  /api/v1/drift/positions         # Get positions
-GET  /api/v1/drift/orders            # Get open orders
-POST /api/v1/drift/deposit           # Deposit
-POST /api/v1/drift/withdraw          # Withdraw
+POST /api/v1/drift/order/place/market  # Place market order
+POST /api/v1/drift/order/place/limit   # Place limit order
+POST /api/v1/drift/order/place         # Place order (generic)
+POST /api/v1/drift/order/cancel        # Cancel order
+POST /api/v1/drift/orders/cancel-all   # Cancel all
+GET  /api/v1/drift/positions           # Get positions
+GET  /api/v1/drift/orders              # Get open orders
+POST /api/v1/drift/deposit             # Deposit
+POST /api/v1/drift/withdraw            # Withdraw
 ```
 
 ## Frontend Implementation
@@ -220,3 +222,96 @@ const connection = new Connection('https://api.mainnet-beta.solana.com', 'confir
 ## Full Example Component
 
 See the complete React component in the full documentation or check the examples folder.
+
+## Trading Examples
+
+### Place Market Order
+
+Executes immediately at the best available price.
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/order/place/market \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "marketIndex": 0,
+    "direction": "long",
+    "baseAssetAmount": "1000000000",
+    "reduceOnly": false
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "signature": "5iV...",
+  "orderType": "MARKET"
+}
+```
+
+### Place Limit Order
+
+Executes at the specified price or better.
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/order/place/limit \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "marketIndex": 0,
+    "direction": "long",
+    "baseAssetAmount": "1000000000",
+    "price": "150000000",
+    "reduceOnly": false,
+    "postOnly": false
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "signature": "5iV...",
+  "orderType": "LIMIT"
+}
+```
+
+### Get Positions
+
+```bash
+curl http://localhost:3002/api/v1/drift/positions \
+  -H "Authorization: Bearer <token>"
+```
+
+### Get Open Orders
+
+```bash
+curl http://localhost:3002/api/v1/drift/orders \
+  -H "Authorization: Bearer <token>"
+```
+
+### Cancel Order
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/order/cancel \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"orderId": 12345}'
+```
+
+## Amount Format
+
+- **baseAssetAmount**: In base token units with 9 decimals (e.g., `1000000000` = 1 SOL)
+- **price**: In quote token units with 6 decimals (e.g., `150000000` = $150 USDC)
+
+## Error Handling
+
+Common errors when placing orders:
+
+| Error | Meaning | Solution |
+|-------|---------|----------|
+| `NO_DRIFT_ACCOUNT` | User doesn't have a Drift account | Initialize first via `GET /drift/account/initialize-tx` |
+| `NO_AGENT_WALLET` | No agent wallet created | Create via `POST /agent-wallets` |
+| `NOT_DELEGATED` | Agent wallet not authorized | Delegate via `GET /drift/account/delegation-tx` |
+| `INSUFFICIENT_FUNDS` | Not enough USDC for order | Deposit via `POST /drift/deposit` |

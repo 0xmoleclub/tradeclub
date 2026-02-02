@@ -19,7 +19,7 @@ import { AgentWalletsService } from '../agent-wallets/services/agent-wallets.ser
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Payload } from '../auth/auth.interface';
-import { PlaceOrderDto, PlaceTpSlDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
+import { PlaceOrderDto, MarketOrderDto, LimitOrderDto, PlaceTpSlDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
 import { PositionDirection, OrderType, BN } from '@drift-labs/sdk';
 import { PublicKey } from '@solana/web3.js';
 
@@ -275,8 +275,8 @@ export class DriftController {
 
   @Post('order/place')
   @ApiOperation({
-    summary: 'Place order',
-    description: 'Place a new perpetual order (market or limit)',
+    summary: 'Place order (generic)',
+    description: 'Place a new perpetual order (market or limit). Consider using /order/place/market or /order/place/limit instead.',
   })
   @ApiResponse({ status: 200, description: 'Order placed' })
   async placeOrder(@CurrentUser() user: Payload, @Body() dto: PlaceOrderDto) {
@@ -297,38 +297,57 @@ export class DriftController {
       await driftClient.unsubscribe();
       return { success: true, signature: txSig };
     } catch (error) {
-      console.error('Place order error:', error);
-      
-      // Handle specific error cases
-      if (error.message?.includes('User account not found') || error.message?.includes('does not have a Drift account')) {
-        return {
-          success: false,
-          error: 'NO_DRIFT_ACCOUNT',
-          message: 'You do not have a Drift account. Please deposit first to initialize.',
-          setupRequired: true,
-        };
-      }
-      if (error.message === 'Agent wallet not found for user') {
-        return {
-          success: false,
-          error: 'NO_AGENT_WALLET',
-          message: 'Please create an agent wallet first',
-          setupRequired: true,
-        };
-      }
-      if (error.message === 'Agent wallet is not delegated on Drift') {
-        return {
-          success: false,
-          error: 'NOT_DELEGATED',
-          message: 'Please delegate your agent wallet on Drift Protocol',
-          setupRequired: true,
-        };
-      }
-      
-      return {
-        success: false,
-        error: error.message || 'Failed to place order',
-      };
+      return this.handleOrderError(error);
+    }
+  }
+
+  @Post('order/place/market')
+  @ApiOperation({
+    summary: 'Place market order',
+    description: 'Place a market order - executes immediately at best available price',
+  })
+  @ApiResponse({ status: 200, description: 'Market order placed' })
+  async placeMarketOrder(@CurrentUser() user: Payload, @Body() dto: MarketOrderDto) {
+    try {
+      const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
+
+      const txSig = await this.driftService.placeMarketOrder(driftClient, {
+        marketIndex: dto.marketIndex,
+        direction: dto.direction as PositionDirection,
+        baseAssetAmount: new BN(dto.baseAssetAmount),
+        reduceOnly: dto.reduceOnly,
+      });
+
+      await driftClient.unsubscribe();
+      return { success: true, signature: txSig, orderType: 'MARKET' };
+    } catch (error) {
+      return this.handleOrderError(error);
+    }
+  }
+
+  @Post('order/place/limit')
+  @ApiOperation({
+    summary: 'Place limit order',
+    description: 'Place a limit order - executes at specified price or better',
+  })
+  @ApiResponse({ status: 200, description: 'Limit order placed' })
+  async placeLimitOrder(@CurrentUser() user: Payload, @Body() dto: LimitOrderDto) {
+    try {
+      const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
+
+      const txSig = await this.driftService.placeLimitOrder(driftClient, {
+        marketIndex: dto.marketIndex,
+        direction: dto.direction as PositionDirection,
+        baseAssetAmount: new BN(dto.baseAssetAmount),
+        price: new BN(dto.price),
+        reduceOnly: dto.reduceOnly,
+        postOnly: dto.postOnly,
+      });
+
+      await driftClient.unsubscribe();
+      return { success: true, signature: txSig, orderType: 'LIMIT' };
+    } catch (error) {
+      return this.handleOrderError(error);
     }
   }
 
@@ -465,5 +484,41 @@ export class DriftController {
     const price = await this.driftService.getMarketPrice(driftClient, marketIndex);
     await driftClient.unsubscribe();
     return { marketIndex, price };
+  }
+
+  // ==================== Error Handler ====================
+
+  private handleOrderError(error: any) {
+    console.error('Order error:', error);
+    
+    if (error.message?.includes('User account not found') || error.message?.includes('does not have a Drift account')) {
+      return {
+        success: false,
+        error: 'NO_DRIFT_ACCOUNT',
+        message: 'You do not have a Drift account. Please deposit first to initialize.',
+        setupRequired: true,
+      };
+    }
+    if (error.message === 'Agent wallet not found for user') {
+      return {
+        success: false,
+        error: 'NO_AGENT_WALLET',
+        message: 'Please create an agent wallet first',
+        setupRequired: true,
+      };
+    }
+    if (error.message === 'Agent wallet is not delegated on Drift') {
+      return {
+        success: false,
+        error: 'NOT_DELEGATED',
+        message: 'Please delegate your agent wallet on Drift Protocol',
+        setupRequired: true,
+      };
+    }
+    
+    return {
+      success: false,
+      error: error.message || 'Failed to place order',
+    };
   }
 }
