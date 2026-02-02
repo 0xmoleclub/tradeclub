@@ -109,103 +109,10 @@ export class DriftController {
     return balance;
   }
 
-  @Post('account/set-delegate')
-  @ApiOperation({
-    summary: 'Set agent wallet as delegate',
-    description: 'Submit a signed delegation transaction to authorize the agent wallet.',
-  })
-  async setDelegate(
-    @CurrentUser() user: Payload,
-    @Body('signedTransaction') signedTransaction: string,
-  ) {
-    try {
-      if (!signedTransaction) {
-        return {
-          success: false,
-          error: 'MISSING_SIGNED_TRANSACTION',
-          message: 'Please provide signedTransaction (base64 encoded signed transaction)',
-          help: '1. Get unsigned tx from GET /drift/account/delegation-tx, 2. Sign with your wallet, 3. Submit here',
-        };
-      }
-
-      const agentWallet = await this.agentWalletsService.getAgentWalletByUserId(user.id);
-      if (!agentWallet) {
-        return {
-          success: false,
-          error: 'NO_AGENT_WALLET',
-          message: 'Create an agent wallet first: POST /agent-wallets',
-          setupRequired: true,
-        };
-      }
-
-      // Submit the signed transaction
-      const txSig = await this.driftService.submitSignedTransaction(signedTransaction);
-
-      // Mark as delegated in database
-      if (!agentWallet.isDelegated) {
-        await this.agentWalletsService.markAsDelegated(agentWallet.id, 0);
-      }
-
-      return {
-        success: true,
-        message: 'Agent wallet authorized to trade on your behalf',
-        signature: txSig,
-        delegate: agentWallet.publicKey,
-      };
-    } catch (error) {
-      console.error('Set delegate error:', error);
-      return { success: false, error: error.message || 'Failed' };
-    }
-  }
-
-  @Post('account/revoke-delegate')
-  @ApiOperation({
-    summary: 'Revoke agent wallet delegation',
-    description: 'Submit a signed transaction to remove agent wallet authorization. This prevents the agent from trading on your behalf.',
-  })
-  async revokeDelegate(
-    @CurrentUser() user: Payload,
-    @Body('signedTransaction') signedTransaction: string,
-  ) {
-    try {
-      if (!signedTransaction) {
-        return {
-          success: false,
-          error: 'MISSING_SIGNED_TRANSACTION',
-          message: 'Get unsigned tx from GET /drift/account/revoke-delegation-tx, sign it, and submit here',
-        };
-      }
-
-      const agentWallet = await this.agentWalletsService.getAgentWalletByUserId(user.id);
-      if (!agentWallet) {
-        return {
-          success: false,
-          error: 'NO_AGENT_WALLET',
-          message: 'No agent wallet found',
-        };
-      }
-
-      // Submit the signed transaction
-      const txSig = await this.driftService.submitSignedTransaction(signedTransaction);
-
-      // Mark as NOT delegated in database
-      await this.agentWalletsService.revokeDelegation(agentWallet.id);
-
-      return {
-        success: true,
-        message: 'Agent wallet authorization revoked. It can no longer trade on your behalf.',
-        signature: txSig,
-      };
-    } catch (error) {
-      console.error('Revoke delegate error:', error);
-      return { success: false, error: error.message || 'Failed' };
-    }
-  }
-
   @Get('account/delegation-tx')
   @ApiOperation({
     summary: 'Get unsigned delegation transaction',
-    description: 'Returns an unsigned transaction to authorize the agent wallet. Sign and submit to POST /account/set-delegate',
+    description: 'Returns an unsigned transaction to authorize the agent wallet. Sign and submit DIRECTLY to Solana (not to backend). See docs/FRONTEND_INTEGRATION.md',
   })
   async getDelegationTx(@CurrentUser() user: Payload) {
     try {
@@ -249,7 +156,7 @@ export class DriftController {
   @Get('account/revoke-delegation-tx')
   @ApiOperation({
     summary: 'Get unsigned revoke transaction',
-    description: 'Returns an unsigned transaction to REMOVE agent wallet authorization. Sign and submit to POST /account/set-delegate with the signed transaction',
+    description: 'Returns an unsigned transaction to REMOVE agent wallet authorization. Sign and submit DIRECTLY to Solana. See docs/FRONTEND_INTEGRATION.md',
   })
   async getRevokeDelegationTx(@CurrentUser() user: Payload) {
     try {
@@ -280,15 +187,12 @@ export class DriftController {
     }
   }
 
-  @Post('account/initialize')
+  @Get('account/initialize-tx')
   @ApiOperation({
-    summary: 'Initialize Drift account',
-    description: 'Creates a new Drift account for users who dont have one. This is a 2-step flow: 1) Call this to get unsigned tx, 2) Sign and submit back here with signedTransaction',
+    summary: 'Get unsigned initialize transaction',
+    description: 'Returns an unsigned transaction to create Drift account. Sign and submit DIRECTLY to Solana. See docs/FRONTEND_INTEGRATION.md',
   })
-  async initializeDriftAccount(
-    @CurrentUser() user: Payload,
-    @Body('signedTransaction') signedTransaction?: string,
-  ) {
+  async getInitializeTx(@CurrentUser() user: Payload) {
     try {
       const agentWallet = await this.agentWalletsService.getAgentWalletByUserId(user.id);
       if (!agentWallet) {
@@ -310,35 +214,16 @@ export class DriftController {
         };
       }
 
-      // If no signed transaction provided, return unsigned one
-      if (!signedTransaction) {
-        const serializedTx = await this.driftService.buildInitializeAccountTransaction(
-          user.walletAddress,
-          agentWallet.publicKey,
-        );
-
-        return {
-          success: true,
-          message: 'Sign this transaction to create your Drift account (~0.002 SOL)',
-          transaction: serializedTx,
-          nextStep: 'Sign and submit back to this endpoint with signedTransaction',
-        };
-      }
-
-      // Submit the signed transaction
-      const txSig = await this.driftService.submitSignedTransaction(signedTransaction);
-
-      // Mark agent wallet as activated
-      await this.agentWalletsService.markAsActivated(agentWallet.id);
+      // Return unsigned transaction
+      const serializedTx = await this.driftService.buildInitializeAccountTransaction(
+        user.walletAddress,
+        agentWallet.publicKey,
+      );
 
       return {
         success: true,
-        message: 'Drift account created successfully!',
-        signature: txSig,
-        nextSteps: {
-          delegate: 'GET /drift/account/delegation-tx then POST /drift/account/set-delegate',
-          deposit: 'POST /drift/deposit',
-        },
+        message: 'Sign this transaction to create your Drift account (~0.002 SOL). Submit DIRECTLY to Solana.',
+        transaction: serializedTx,
       };
     } catch (error) {
       console.error('Initialize account error:', error);
