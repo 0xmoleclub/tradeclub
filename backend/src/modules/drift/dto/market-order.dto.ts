@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumberString, IsOptional, IsBoolean, IsInt, Min } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsNumberString, IsInt, Min } from 'class-validator';
 import { PositionDirectionEnum } from '@/common/enums';
 
 export class MarketOrderDto {
@@ -25,12 +25,4 @@ export class MarketOrderDto {
   })
   @IsNumberString()
   baseAssetAmount: string;
-
-  @ApiPropertyOptional({
-    description: 'Reduce only - only close position, no new position',
-    default: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  reduceOnly?: boolean;
 }

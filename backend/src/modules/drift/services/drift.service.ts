@@ -589,14 +589,13 @@ export class DriftService implements OnModuleInit {
       marketIndex: number;
       direction: PositionDirection;
       baseAssetAmount: BN;
-      reduceOnly?: boolean;
     },
   ): Promise<string> {
     const optionalParams = getMarketOrderParams({
       marketIndex: params.marketIndex,
       direction: params.direction,
       baseAssetAmount: params.baseAssetAmount,
-      reduceOnly: params.reduceOnly,
+      reduceOnly: false, // Always false for opening positions
     });
 
     const orderParams = getOrderParams(optionalParams, {
@@ -620,8 +619,6 @@ export class DriftService implements OnModuleInit {
       direction: PositionDirection;
       baseAssetAmount: BN;
       price: BN;
-      reduceOnly?: boolean;
-      postOnly?: boolean;
     },
   ): Promise<string> {
     const optionalParams = getLimitOrderParams({
@@ -629,8 +626,8 @@ export class DriftService implements OnModuleInit {
       direction: params.direction,
       baseAssetAmount: params.baseAssetAmount,
       price: params.price,
-      reduceOnly: params.reduceOnly,
-      postOnly: params.postOnly,
+      reduceOnly: false, // Always false for opening positions
+      postOnly: false,  // Always false (can take liquidity)
     });
 
     const orderParams = getOrderParams(optionalParams, {
@@ -641,6 +638,124 @@ export class DriftService implements OnModuleInit {
     this.logger.log(`Placed limit order: ${txSig}`);
     
     return txSig;
+  }
+
+  /**
+   * Close position at market price
+   * Automatically determines the correct direction and size based on current position
+   */
+  async closePositionMarket(
+    driftClient: DriftClient,
+    marketIndex: number,
+  ): Promise<{ signature: string; closedAmount: string }> {
+    const user = driftClient.getUser();
+    const position = user.getPerpPosition(marketIndex);
+    
+    if (!position || position.baseAssetAmount.isZero()) {
+      throw new Error(`No open position found for market ${marketIndex}`);
+    }
+
+    // Determine direction opposite to current position
+    // Long position -> Sell (SHORT direction)
+    // Short position -> Buy (LONG direction)
+    const isLong = position.baseAssetAmount.gt(new BN(0));
+    const direction = isLong ? PositionDirection.SHORT : PositionDirection.LONG;
+    const closeAmount = position.baseAssetAmount.abs();
+
+    const optionalParams = getMarketOrderParams({
+      marketIndex,
+      direction,
+      baseAssetAmount: closeAmount,
+      reduceOnly: true, // Important: prevents accidental position reversal
+    });
+
+    const orderParams = getOrderParams(optionalParams, {
+      marketType: MarketType.PERP,
+    });
+
+    const txSig = await driftClient.placePerpOrder(orderParams);
+    this.logger.log(`Closed position at market: ${txSig}`);
+    
+    return {
+      signature: txSig,
+      closedAmount: closeAmount.toString(),
+    };
+  }
+
+  /**
+   * Close position at limit price
+   * Automatically determines the correct direction and size based on current position
+   */
+  async closePositionLimit(
+    driftClient: DriftClient,
+    marketIndex: number,
+    price: BN,
+  ): Promise<{ signature: string; closedAmount: string }> {
+    const user = driftClient.getUser();
+    const position = user.getPerpPosition(marketIndex);
+    
+    if (!position || position.baseAssetAmount.isZero()) {
+      throw new Error(`No open position found for market ${marketIndex}`);
+    }
+
+    // Determine direction opposite to current position
+    const isLong = position.baseAssetAmount.gt(new BN(0));
+    const direction = isLong ? PositionDirection.SHORT : PositionDirection.LONG;
+    const closeAmount = position.baseAssetAmount.abs();
+
+    const optionalParams = getLimitOrderParams({
+      marketIndex,
+      direction,
+      baseAssetAmount: closeAmount,
+      price,
+      reduceOnly: true, // Important: prevents accidental position reversal
+      postOnly: false,  // Can take liquidity when closing
+    });
+
+    const orderParams = getOrderParams(optionalParams, {
+      marketType: MarketType.PERP,
+    });
+
+    const txSig = await driftClient.placePerpOrder(orderParams);
+    this.logger.log(`Closed position at limit: ${txSig}`);
+    
+    return {
+      signature: txSig,
+      closedAmount: closeAmount.toString(),
+    };
+  }
+
+  /**
+   * Close all positions at market price
+   * Returns array of signatures for each closed position
+   */
+  async closeAllPositions(
+    driftClient: DriftClient,
+  ): Promise<{ signatures: string[]; closedPositions: { marketIndex: number; amount: string }[] }> {
+    const user = driftClient.getUser();
+    const positions = user.getActivePerpPositions();
+    
+    const signatures: string[] = [];
+    const closedPositions: { marketIndex: number; amount: string }[] = [];
+
+    for (const position of positions) {
+      if (position.baseAssetAmount.isZero()) continue;
+
+      try {
+        const result = await this.closePositionMarket(driftClient, position.marketIndex);
+        signatures.push(result.signature);
+        closedPositions.push({
+          marketIndex: position.marketIndex,
+          amount: result.closedAmount,
+        });
+      } catch (error) {
+        this.logger.error(`Failed to close position for market ${position.marketIndex}: ${error.message}`);
+        // Continue closing other positions even if one fails
+      }
+    }
+
+    this.logger.log(`Closed ${signatures.length} positions`);
+    return { signatures, closedPositions };
   }
 
   /**
@@ -655,13 +770,13 @@ export class DriftService implements OnModuleInit {
       baseAssetAmount: BN;
       triggerPrice: BN;
       limitPrice?: BN;
-      isStopLoss: boolean;
     },
+    isStopLoss: boolean,
   ): Promise<string> {
     // Determine trigger condition
     // For LONG position: TP = trigger above, SL = trigger below
     // For SHORT position: TP = trigger below, SL = trigger above
-    const triggerCondition = params.isStopLoss
+    const triggerCondition = isStopLoss
       ? (params.direction === PositionDirection.LONG 
           ? OrderTriggerCondition.BELOW 
           : OrderTriggerCondition.ABOVE)
@@ -699,7 +814,7 @@ export class DriftService implements OnModuleInit {
     });
 
     const txSig = await driftClient.placePerpOrder(orderParams);
-    this.logger.log(`Placed ${params.isStopLoss ? 'Stop Loss' : 'Take Profit'} order: ${txSig}`);
+    this.logger.log(`Placed ${isStopLoss ? 'Stop Loss' : 'Take Profit'} order: ${txSig}`);
     
     return txSig;
   }

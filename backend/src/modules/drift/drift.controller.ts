@@ -19,11 +19,10 @@ import { AgentWalletsService } from '../agent-wallets/services/agent-wallets.ser
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Payload } from '../auth/auth.interface';
-import { MarketOrderDto, LimitOrderDto, PlaceTpSlDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
+import { MarketOrderDto, LimitOrderDto, ClosePositionMarketDto, ClosePositionLimitDto, PlaceTpSlDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
 import { PositionDirection, BN } from '@drift-labs/sdk';
 import { PublicKey } from '@solana/web3.js';
 
-@ApiTags('Drift Trading')
 @Controller('drift')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
@@ -33,9 +32,10 @@ export class DriftController {
     private readonly agentWalletsService: AgentWalletsService,
   ) {}
 
-  // ==================== Account Management ====================
+  // ==================== Drift Account ====================
 
   @Get('account')
+  @ApiTags('Drift Account')
   @ApiOperation({
     summary: 'Get Drift account info',
     description: 'Returns collateral, margin, leverage, and other account metrics',
@@ -90,6 +90,7 @@ export class DriftController {
   }
 
   @Get('account/status')
+  @ApiTags('Drift Account')
   @ApiOperation({
     summary: 'Get account activation status',
     description: 'Returns activation status, agent wallet SOL balance (for gas), and user Drift USDC balance',
@@ -100,6 +101,7 @@ export class DriftController {
   }
 
   @Get('account/external-balance')
+  @ApiTags('Drift Account')
   @ApiOperation({
     summary: 'Check main wallet Drift balance',
     description: 'Checks if the user\'s main wallet already has USDC deposited in Drift Protocol (for users who used Drift before TradeClub)',
@@ -110,6 +112,7 @@ export class DriftController {
   }
 
   @Get('account/delegation-tx')
+  @ApiTags('Drift Account')
   @ApiOperation({
     summary: 'Get unsigned delegation transaction',
     description: 'Returns an unsigned transaction to authorize the agent wallet. Sign and submit DIRECTLY to Solana (not to backend). See docs/FRONTEND_INTEGRATION.md',
@@ -154,6 +157,7 @@ export class DriftController {
   }
 
   @Get('account/revoke-delegation-tx')
+  @ApiTags('Drift Account')
   @ApiOperation({
     summary: 'Get unsigned revoke transaction',
     description: 'Returns an unsigned transaction to REMOVE agent wallet authorization. Sign and submit DIRECTLY to Solana. See docs/FRONTEND_INTEGRATION.md',
@@ -188,6 +192,7 @@ export class DriftController {
   }
 
   @Get('account/initialize-tx')
+  @ApiTags('Drift Account')
   @ApiOperation({
     summary: 'Get unsigned initialize transaction',
     description: 'Returns an unsigned transaction to create Drift account. Sign and submit DIRECTLY to Solana. See docs/FRONTEND_INTEGRATION.md',
@@ -231,9 +236,10 @@ export class DriftController {
     }
   }
 
-  // ==================== Positions ====================
+  // ==================== Drift Perp Trading ====================
 
   @Get('positions')
+  @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Get open positions',
     description: 'Returns all open perpetual positions',
@@ -252,9 +258,8 @@ export class DriftController {
     }
   }
 
-  // ==================== Orders ====================
-
   @Get('orders')
+  @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Get open orders',
     description: 'Returns all open orders',
@@ -274,6 +279,7 @@ export class DriftController {
   }
 
   @Post('order/place/market')
+  @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Place market order',
     description: 'Place a market order - executes immediately at best available price',
@@ -287,7 +293,6 @@ export class DriftController {
         marketIndex: dto.marketIndex,
         direction: dto.direction as PositionDirection,
         baseAssetAmount: new BN(dto.baseAssetAmount),
-        reduceOnly: dto.reduceOnly,
       });
 
       await driftClient.unsubscribe();
@@ -298,6 +303,7 @@ export class DriftController {
   }
 
   @Post('order/place/limit')
+  @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Place limit order',
     description: 'Place a limit order - executes at specified price or better',
@@ -312,8 +318,6 @@ export class DriftController {
         direction: dto.direction as PositionDirection,
         baseAssetAmount: new BN(dto.baseAssetAmount),
         price: new BN(dto.price),
-        reduceOnly: dto.reduceOnly,
-        postOnly: dto.postOnly,
       });
 
       await driftClient.unsubscribe();
@@ -324,6 +328,7 @@ export class DriftController {
   }
 
   @Post('order/cancel')
+  @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Cancel order',
     description: 'Cancel a specific order by ID',
@@ -338,6 +343,7 @@ export class DriftController {
   }
 
   @Post('orders/cancel-all')
+  @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Cancel all orders',
     description: 'Cancel all open orders',
@@ -350,46 +356,136 @@ export class DriftController {
   }
 
   @Post('order/take-profit')
+  @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Place Take Profit order',
     description: 'Place a take profit order (reduces position when price hits target)',
   })
   async placeTakeProfit(@CurrentUser() user: Payload, @Body() dto: PlaceTpSlDto) {
     const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
-    const txSig = await this.driftService.placeTpSlOrder(driftClient, {
-      marketIndex: dto.marketIndex,
-      direction: dto.direction as PositionDirection,
-      baseAssetAmount: new BN(dto.baseAssetAmount),
-      triggerPrice: new BN(dto.triggerPrice),
-      limitPrice: dto.limitPrice ? new BN(dto.limitPrice) : undefined,
-      isStopLoss: false,
-    });
+    const txSig = await this.driftService.placeTpSlOrder(
+      driftClient,
+      {
+        marketIndex: dto.marketIndex,
+        direction: dto.direction as PositionDirection,
+        baseAssetAmount: new BN(dto.baseAssetAmount),
+        triggerPrice: new BN(dto.triggerPrice),
+        limitPrice: dto.limitPrice ? new BN(dto.limitPrice) : undefined,
+      },
+      false, // Take Profit
+    );
     await driftClient.unsubscribe();
     return { success: true, signature: txSig, type: 'TAKE_PROFIT' };
   }
 
   @Post('order/stop-loss')
+  @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Place Stop Loss order',
     description: 'Place a stop loss order (reduces position when price hits stop)',
   })
   async placeStopLoss(@CurrentUser() user: Payload, @Body() dto: PlaceTpSlDto) {
     const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
-    const txSig = await this.driftService.placeTpSlOrder(driftClient, {
-      marketIndex: dto.marketIndex,
-      direction: dto.direction as PositionDirection,
-      baseAssetAmount: new BN(dto.baseAssetAmount),
-      triggerPrice: new BN(dto.triggerPrice),
-      limitPrice: dto.limitPrice ? new BN(dto.limitPrice) : undefined,
-      isStopLoss: true,
-    });
+    const txSig = await this.driftService.placeTpSlOrder(
+      driftClient,
+      {
+        marketIndex: dto.marketIndex,
+        direction: dto.direction as PositionDirection,
+        baseAssetAmount: new BN(dto.baseAssetAmount),
+        triggerPrice: new BN(dto.triggerPrice),
+        limitPrice: dto.limitPrice ? new BN(dto.limitPrice) : undefined,
+      },
+      true, // Stop Loss
+    );
     await driftClient.unsubscribe();
     return { success: true, signature: txSig, type: 'STOP_LOSS' };
   }
 
-  // ==================== Collateral Management ====================
+  // ==================== Position Management ====================
+
+  @Post('position/close/market')
+  @ApiTags('Drift Perp Trading')
+  @ApiOperation({
+    summary: 'Close position at market price',
+    description: 'Close an open position at the current market price. Automatically determines the correct size and direction. Uses reduceOnly to prevent accidental position reversal.',
+  })
+  async closePositionMarket(@CurrentUser() user: Payload, @Body() dto: ClosePositionMarketDto) {
+    try {
+      const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
+      
+      const result = await this.driftService.closePositionMarket(driftClient, dto.marketIndex);
+      
+      await driftClient.unsubscribe();
+      return {
+        success: true,
+        signature: result.signature,
+        closedAmount: result.closedAmount,
+        marketIndex: dto.marketIndex,
+        type: 'CLOSE_MARKET',
+      };
+    } catch (error) {
+      return this.handleOrderError(error);
+    }
+  }
+
+  @Post('position/close/limit')
+  @ApiTags('Drift Perp Trading')
+  @ApiOperation({
+    summary: 'Close position at limit price',
+    description: 'Close an open position at a specified limit price. Automatically determines the correct size and direction. Uses reduceOnly to prevent accidental position reversal.',
+  })
+  async closePositionLimit(@CurrentUser() user: Payload, @Body() dto: ClosePositionLimitDto) {
+    try {
+      const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
+      
+      const result = await this.driftService.closePositionLimit(
+        driftClient,
+        dto.marketIndex,
+        new BN(dto.price),
+      );
+      
+      await driftClient.unsubscribe();
+      return {
+        success: true,
+        signature: result.signature,
+        closedAmount: result.closedAmount,
+        marketIndex: dto.marketIndex,
+        limitPrice: dto.price,
+        type: 'CLOSE_LIMIT',
+      };
+    } catch (error) {
+      return this.handleOrderError(error);
+    }
+  }
+
+  @Post('positions/close-all')
+  @ApiTags('Drift Perp Trading')
+  @ApiOperation({
+    summary: 'Close all positions at market price',
+    description: 'Close all open positions at market price. Useful for emergency exits or end-of-day closes.',
+  })
+  async closeAllPositions(@CurrentUser() user: Payload) {
+    try {
+      const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
+      
+      const result = await this.driftService.closeAllPositions(driftClient);
+      
+      await driftClient.unsubscribe();
+      return {
+        success: true,
+        signatures: result.signatures,
+        closedPositions: result.closedPositions,
+        type: 'CLOSE_ALL_MARKET',
+      };
+    } catch (error) {
+      return this.handleOrderError(error);
+    }
+  }
+
+  // ==================== Drift Account Fund ====================
 
   @Post('deposit')
+  @ApiTags('Drift Account Fund')
   @ApiOperation({
     summary: 'Deposit collateral (with auto-initialization)',
     description: 'Deposit USDC or SOL (auto-swapped to USDC) into Drift account. If Drift account does not exist, it will be initialized automatically (costs ~0.002 SOL). Minimum $5.',
@@ -415,6 +511,7 @@ export class DriftController {
   }
 
   @Post('withdraw')
+  @ApiTags('Drift Account Fund')
   @ApiOperation({
     summary: 'Withdraw collateral',
     description: 'Withdraw USDC or other collateral from Drift account',
@@ -430,9 +527,10 @@ export class DriftController {
     return { success: true, signature: txSig };
   }
 
-  // ==================== Markets ====================
+  // ==================== Market Info ====================
 
   @Get('markets')
+  @ApiTags('Market Info')
   @ApiOperation({
     summary: 'Get available markets',
     description: 'Returns all available perpetual markets',
@@ -443,6 +541,7 @@ export class DriftController {
   }
 
   @Get('markets/:marketIndex/price')
+  @ApiTags('Market Info')
   @ApiOperation({
     summary: 'Get market price',
     description: 'Get current oracle price for a market',

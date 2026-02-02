@@ -67,14 +67,17 @@ GET  /api/v1/drift/account/status              # Check status
 
 ### 4. Trading (requires delegation)
 ```http
-POST /api/v1/drift/order/place/market  # Place market order
-POST /api/v1/drift/order/place/limit   # Place limit order
-POST /api/v1/drift/order/cancel        # Cancel order
-POST /api/v1/drift/orders/cancel-all   # Cancel all
-GET  /api/v1/drift/positions           # Get positions
-GET  /api/v1/drift/orders              # Get open orders
-POST /api/v1/drift/deposit             # Deposit
-POST /api/v1/drift/withdraw            # Withdraw
+POST /api/v1/drift/order/place/market    # Place market order
+POST /api/v1/drift/order/place/limit     # Place limit order
+POST /api/v1/drift/order/cancel          # Cancel order
+POST /api/v1/drift/orders/cancel-all     # Cancel all
+POST /api/v1/drift/position/close/market # Close position at market
+POST /api/v1/drift/position/close/limit  # Close position at limit
+POST /api/v1/drift/positions/close-all   # Close all positions
+GET  /api/v1/drift/positions             # Get positions
+GET  /api/v1/drift/orders                # Get open orders
+POST /api/v1/drift/deposit               # Deposit
+POST /api/v1/drift/withdraw              # Withdraw
 ```
 
 ## Frontend Implementation
@@ -235,8 +238,7 @@ curl -X POST http://localhost:3002/api/v1/drift/order/place/market \
   -d '{
     "marketIndex": 0,
     "direction": "long",
-    "baseAssetAmount": "1000000000",
-    "reduceOnly": false
+    "baseAssetAmount": "1000000000"
   }'
 ```
 
@@ -261,9 +263,7 @@ curl -X POST http://localhost:3002/api/v1/drift/order/place/limit \
     "marketIndex": 0,
     "direction": "long",
     "baseAssetAmount": "1000000000",
-    "price": "150000000",
-    "reduceOnly": false,
-    "postOnly": false
+    "price": "150000000"
   }'
 ```
 
@@ -314,3 +314,82 @@ Common errors when placing orders:
 | `NO_AGENT_WALLET` | No agent wallet created | Create via `POST /agent-wallets` |
 | `NOT_DELEGATED` | Agent wallet not authorized | Delegate via `GET /drift/account/delegation-tx` |
 | `INSUFFICIENT_FUNDS` | Not enough USDC for order | Deposit via `POST /drift/deposit` |
+
+
+### Close Position at Market Price
+
+Close a specific position immediately at the current market price. Automatically determines the correct amount and direction.
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/position/close/market \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "marketIndex": 0
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "signature": "5iV...",
+  "closedAmount": "1000000000",
+  "marketIndex": 0,
+  "type": "CLOSE_MARKET"
+}
+```
+
+### Close Position at Limit Price
+
+Close a specific position at a specified limit price.
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/position/close/limit \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "marketIndex": 0,
+    "price": "155000000"
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "signature": "5iV...",
+  "closedAmount": "1000000000",
+  "marketIndex": 0,
+  "limitPrice": "155000000",
+  "type": "CLOSE_LIMIT"
+}
+```
+
+### Close All Positions
+
+Close all open positions at market price. Useful for emergency exits.
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/positions/close-all \
+  -H "Authorization: Bearer <token>"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "signatures": ["5iV...", "3xR..."],
+  "closedPositions": [
+    { "marketIndex": 0, "amount": "1000000000" },
+    { "marketIndex": 1, "amount": "500000000" }
+  ],
+  "type": "CLOSE_ALL_MARKET"
+}
+```
+
+**Note:** Close position endpoints automatically:
+- Detect the position direction (long/short)
+- Calculate the exact position size
+- Use `reduceOnly: true` to prevent accidental position reversal
+

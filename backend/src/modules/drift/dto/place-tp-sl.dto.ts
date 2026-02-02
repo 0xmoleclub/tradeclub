@@ -1,6 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNumberString, IsOptional, IsBoolean, IsInt, Min } from 'class-validator';
-import { PositionDirection } from '@drift-labs/sdk';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsNumberString, IsOptional, IsInt, Min } from 'class-validator';
 import { PositionDirectionEnum } from '@/common/enums';
 
 export class PlaceTpSlDto {
@@ -34,19 +33,11 @@ export class PlaceTpSlDto {
   @IsNumberString()
   triggerPrice: string;
 
-  @ApiProperty({
-    description: 'Execution price (limit price when triggered, 0 for market)',
+  @ApiPropertyOptional({
+    description: 'Execution price (limit price when triggered, omit for market execution)',
     example: '139500000',
-    default: '0',
   })
   @IsOptional()
   @IsNumberString()
   limitPrice?: string;
-
-  @ApiProperty({
-    description: 'true = Stop Loss, false = Take Profit',
-    example: true,
-  })
-  @IsBoolean()
-  isStopLoss: boolean;
 }
