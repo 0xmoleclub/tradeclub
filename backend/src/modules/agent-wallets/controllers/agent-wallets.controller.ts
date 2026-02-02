@@ -2,11 +2,8 @@ import {
   Controller,
   Post,
   Get,
-  Patch,
   Body,
-  Param,
   UseGuards,
-  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AgentWalletsService } from '../services/agent-wallets.service';
@@ -35,12 +32,37 @@ export class AgentWalletsController {
   @Post()
   @ApiOperation({
     summary: 'Create agent wallet',
-    description: 'Creates a new agent wallet for the authenticated user. This wallet will be used to trade on their behalf on Drift Protocol.',
+    description: 'Creates a new agent wallet for the user. Returns the wallet address and (if needed) an unsigned transaction to authorize it as delegate on Drift.',
   })
-  @ApiResponse({ status: 201, description: 'Agent wallet created successfully' })
-  @ApiResponse({ status: 409, description: 'User already has an agent wallet' })
+  @ApiResponse({ status: 201, description: 'Agent wallet created' })
   async createAgentWallet(@CurrentUser() user: Payload) {
-    return this.agentWalletsService.createAgentWallet(user.id);
+    // Check if wallet already exists
+    const existingWallet = await this.agentWalletsService.getAgentWalletSafe(user.id);
+    if (existingWallet) {
+      return {
+        success: false,
+        message: 'Agent wallet already exists',
+        wallet: existingWallet,
+      };
+    }
+
+    // Create the agent wallet
+    const wallet = await this.agentWalletsService.createAgentWallet(user.id);
+    
+    return {
+      success: true,
+      message: 'Agent wallet created. Next step: deposit to Drift or set delegate if you have an existing account.',
+      wallet: {
+        id: wallet.id,
+        publicKey: wallet.publicKey,
+        isDelegated: wallet.isDelegated,
+        createdAt: wallet.createdAt,
+      },
+      nextSteps: {
+        deposit: 'POST /drift/deposit (for new Drift accounts)',
+        setDelegate: 'POST /drift/account/set-delegate (for existing Drift accounts)',
+      },
+    };
   }
 
   @Get('me')
@@ -51,7 +73,7 @@ export class AgentWalletsController {
   @ApiResponse({ status: 200, description: 'Agent wallet found' })
   @ApiResponse({ status: 404, description: 'No agent wallet found' })
   async getMyAgentWallet(@CurrentUser() user: Payload) {
-    const wallet = await this.agentWalletsService.getAgentWalletByUserId(user.id);
+    const wallet = await this.agentWalletsService.getAgentWalletSafe(user.id);
     if (!wallet) {
       return { message: 'No agent wallet found', wallet: null };
     }
@@ -98,55 +120,6 @@ export class AgentWalletsController {
       gasBalanceLamports: balance,
       minRecommended: 0.1,
       hasEnoughGas: solBalance >= 0.01,
-    };
-  }
-
-  @Post('prepare-fund')
-  @ApiOperation({
-    summary: 'Prepare gas funding transaction',
-    description: 'Creates a transaction for user to sign that sends SOL from their wallet to their agent wallet',
-  })
-  async prepareFundTransaction(
-    @CurrentUser() user: Payload,
-    @Body() dto: { amount: string },
-  ) {
-    const wallet = await this.agentWalletsService.getAgentWalletByUserId(user.id);
-    
-    if (!wallet) {
-      throw new Error('Agent wallet not found');
-    }
-
-    const amountSol = parseFloat(dto.amount);
-    if (isNaN(amountSol) || amountSol <= 0) {
-      throw new Error('Invalid amount');
-    }
-
-    const lamports = Math.floor(amountSol * 1e9);
-    const userPublicKey = new PublicKey(user.walletAddress);
-    const agentPublicKey = new PublicKey(wallet.publicKey);
-
-    const transferInstruction = SystemProgram.transfer({
-      fromPubkey: userPublicKey,
-      toPubkey: agentPublicKey,
-      lamports,
-    });
-
-    const transaction = new Transaction().add(transferInstruction);
-    transaction.feePayer = userPublicKey;
-    
-    const { blockhash } = await this.connection.getLatestBlockhash();
-    transaction.recentBlockhash = blockhash;
-
-    const serializedTx = transaction.serialize({
-      requireAllSignatures: false,
-      verifySignatures: false,
-    });
-
-    return {
-      serializedTransaction: serializedTx.toString('base64'),
-      agentWalletAddress: wallet.publicKey,
-      amount: amountSol,
-      message: 'Sign this transaction to fund your agent wallet with SOL for gas fees',
     };
   }
 
@@ -229,28 +202,5 @@ export class AgentWalletsController {
       remainingBalance: (balance - withdrawLamports) / 1e9,
       message: 'Transaction prepared. Send this to withdraw SOL from agent wallet to your wallet',
     };
-  }
-
-  @Patch(':id/delegate')
-  @ApiOperation({
-    summary: 'Mark wallet as delegated',
-    description: 'Marks the agent wallet as delegated on Drift Protocol',
-  })
-  @ApiResponse({ status: 200, description: 'Wallet marked as delegated' })
-  async markAsDelegated(
-    @Param('id', ParseUUIDPipe) walletId: string,
-    @Body('subaccountIndex') subaccountIndex: number = 0,
-  ) {
-    return this.agentWalletsService.markAsDelegated(walletId, subaccountIndex);
-  }
-
-  @Patch(':id/revoke')
-  @ApiOperation({
-    summary: 'Revoke delegation',
-    description: 'Revokes the delegation of the agent wallet',
-  })
-  @ApiResponse({ status: 200, description: 'Delegation revoked' })
-  async revokeDelegation(@Param('id', ParseUUIDPipe) walletId: string) {
-    return this.agentWalletsService.revokeDelegation(walletId);
   }
 }

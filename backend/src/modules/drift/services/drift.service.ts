@@ -19,7 +19,7 @@ import {
   PerpMarkets,
   getOrderParams,
 } from '@drift-labs/sdk';
-import { Connection, Keypair, PublicKey, Commitment } from '@solana/web3.js';
+import { Connection, Keypair, PublicKey, Commitment, Transaction } from '@solana/web3.js';
 import { PrismaService } from '../../../database/prisma.service';
 import { AgentWalletsService } from '../../agent-wallets/services/agent-wallets.service';
 import { JupiterService } from './jupiter.service';
@@ -59,25 +59,33 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
-   * Initialize Drift client for a specific user (using their agent wallet)
+   * Initialize Drift client for a specific user
+   * Agent wallet signs transactions, but user wallet is the authority (holds funds)
+   * 
+   * @param skipDelegateCheck - If true, doesn't verify the on-chain delegate (useful for set-delegate endpoint)
    */
-  async initializeForUser(userId: string): Promise<DriftClient> {
+  async initializeForUser(
+    userId: string, 
+    userWalletAddress: string,
+    skipDelegateCheck = false,
+  ): Promise<DriftClient> {
     const agentWallet = await this.agentWalletsService.getAgentWalletByUserId(userId);
     
     if (!agentWallet) {
       throw new Error('Agent wallet not found for user');
     }
 
-    if (!agentWallet.isDelegated) {
+    // Only check database flag if we're not skipping delegate check (trading operations)
+    if (!skipDelegateCheck && !agentWallet.isDelegated) {
       throw new Error('Agent wallet is not delegated on Drift');
     }
 
-    // Decrypt secret key and create keypair
+    // Decrypt secret key and create keypair (agent wallet - for signing)
     const secretKey = await this.agentWalletsService.getSecretKey(agentWallet.id);
     const keypair = Keypair.fromSecretKey(secretKey);
     const wallet = new Wallet(keypair);
 
-    // Initialize Drift client
+    // Initialize Drift client with agent wallet for signing
     const driftClient = new DriftClient({
       connection: this.connection,
       wallet,
@@ -90,6 +98,37 @@ export class DriftService implements OnModuleInit {
     });
 
     await driftClient.subscribe();
+
+    // Set the user to the user's main wallet (not agent wallet)
+    // This is the wallet that holds the funds
+    const userPublicKey = new PublicKey(userWalletAddress);
+    
+    // Check if user has a Drift account before trying to switch to it
+    const hasAccount = await this.hasDriftAccount(driftClient, userPublicKey);
+    if (!hasAccount) {
+      throw new Error(`User account not found: ${userWalletAddress} does not have a Drift account. Please deposit first to initialize.`);
+    }
+    
+    // Add user to DriftClient before switching (required by SDK)
+    await driftClient.addUser(0, userPublicKey);
+    
+    // Switch to the user's account
+    await driftClient.switchActiveUser(0, userPublicKey);
+
+    // Verify that the agent wallet is set as delegate on-chain (skip for set-delegate flow)
+    if (!skipDelegateCheck) {
+      const user = driftClient.getUser();
+      const userAccount = user.getUserAccount();
+      const expectedDelegate = new PublicKey(agentWallet.publicKey);
+      
+      if (!userAccount.delegate || userAccount.delegate.toString() !== expectedDelegate.toString()) {
+        throw new Error(
+          `Agent wallet is not set as delegate on-chain. ` +
+          `Current delegate: ${userAccount.delegate?.toString() || 'none'}. ` +
+          `Please call POST /drift/account/set-delegate to authorize the agent wallet.`
+        );
+      }
+    }
 
     return driftClient;
   }
@@ -134,18 +173,177 @@ export class DriftService implements OnModuleInit {
 
   /**
    * Initialize Drift account for user
+   * Also sets the agent wallet as delegate so it can sign transactions
    */
   async initializeDriftAccount(
     driftClient: DriftClient,
+    agentPublicKey: PublicKey,
     name?: string,
-  ): Promise<string> {
-    const [txSig] = await driftClient.initializeUserAccount(
+  ): Promise<{ initSignature: string; delegateSignature: string }> {
+    // Initialize the user account
+    const [txSig, userAccountPublicKey] = await driftClient.initializeUserAccount(
       0, // subAccountId
       name || 'Main Account',
     );
+    this.logger.log(`Initialized Drift account: ${txSig}`);
 
-    this.logger.log(`Initialized Drift account for user`);
+    // Set the agent wallet as delegate so it can sign transactions
+    const delegateSig = await driftClient.updateUserDelegate(agentPublicKey, 0);
+    this.logger.log(`Set delegate to ${agentPublicKey.toString()}: ${delegateSig}`);
+
+    return { initSignature: txSig, delegateSignature: delegateSig };
+  }
+
+  /**
+   * Update the delegate for a user's Drift account
+   * This allows the agent wallet to sign transactions on behalf of the user
+   */
+  async updateUserDelegate(
+    driftClient: DriftClient,
+    delegatePublicKey: PublicKey,
+  ): Promise<string> {
+    const txSig = await driftClient.updateUserDelegate(delegatePublicKey, 0);
+    this.logger.log(`Updated user delegate to ${delegatePublicKey.toString()}: ${txSig}`);
     return txSig;
+  }
+
+  /**
+   * Get the current delegate for a user's Drift account
+   */
+  async getUserDelegate(driftClient: DriftClient): Promise<PublicKey | null> {
+    try {
+      const user = driftClient.getUser();
+      const userAccount = user.getUserAccount();
+      return userAccount.delegate || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Build a transaction to set the delegate
+   * This transaction must be signed by the user (authority)
+   */
+  async buildSetDelegateTransaction(
+    userWalletAddress: string,
+    agentWalletPublicKey: string,
+  ): Promise<string> {
+    const authority = new PublicKey(userWalletAddress);
+    const delegate = new PublicKey(agentWalletPublicKey);
+
+    // Create a temporary drift client just to build the instruction
+    // We use a dummy wallet since we're only building, not signing
+    const dummyWallet = new Wallet(Keypair.generate());
+    const driftClient = new DriftClient({
+      connection: this.connection,
+      wallet: dummyWallet,
+      env: this.isDevnet ? 'devnet' : 'mainnet-beta',
+    });
+
+    await driftClient.subscribe();
+
+    try {
+      // Get user account public key
+      const userAccountPublicKey = await getUserAccountPublicKey(
+        driftClient.program.programId,
+        authority,
+        0,
+      );
+
+      // Get the update delegate instruction with explicit user account
+      const ix = await driftClient.getUpdateUserDelegateIx(delegate, {
+        subAccountId: 0,
+        userAccountPublicKey,
+        authority,
+      });
+
+      // Create transaction
+      const transaction = new Transaction();
+      
+      // Add recent blockhash
+      const { blockhash } = await this.connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = authority; // User pays the fee
+      
+      // Add the instruction
+      transaction.add(ix);
+
+      // Serialize to base64
+      const serialized = transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false,
+      });
+
+      return serialized.toString('base64');
+    } finally {
+      await driftClient.unsubscribe();
+    }
+  }
+
+  /**
+   * Build a transaction to initialize a Drift user account
+   * This transaction must be signed by the user (authority)
+   */
+  async buildInitializeAccountTransaction(
+    userWalletAddress: string,
+    agentWalletPublicKey?: string,
+  ): Promise<string> {
+    const authority = new PublicKey(userWalletAddress);
+
+    // Create a temporary drift client
+    const dummyWallet = new Wallet(Keypair.generate());
+    const driftClient = new DriftClient({
+      connection: this.connection,
+      wallet: dummyWallet,
+      env: this.isDevnet ? 'devnet' : 'mainnet-beta',
+    });
+
+    await driftClient.subscribe();
+
+    try {
+      // Get the initialize user account instructions
+      const [ixs] = await driftClient.getInitializeUserAccountIxs(0, 'Main Account');
+
+      // Create transaction
+      const transaction = new Transaction();
+      
+      // Add recent blockhash
+      const { blockhash } = await this.connection.getLatestBlockhash();
+      transaction.recentBlockhash = blockhash;
+      transaction.feePayer = authority; // User pays the fee
+      
+      // Add the instructions
+      transaction.add(...ixs);
+
+      // Serialize to base64
+      const serialized = transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false,
+      });
+
+      return serialized.toString('base64');
+    } finally {
+      await driftClient.unsubscribe();
+    }
+  }
+
+  /**
+   * Submit a signed transaction to the blockchain
+   */
+  async submitSignedTransaction(signedTransactionBase64: string): Promise<string> {
+    const txBuffer = Buffer.from(signedTransactionBase64, 'base64');
+    const transaction = Transaction.from(txBuffer);
+    
+    const signature = await this.connection.sendRawTransaction(txBuffer, {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+    });
+    
+    // Wait for confirmation
+    await this.connection.confirmTransaction(signature, 'confirmed');
+    
+    this.logger.log(`Submitted transaction: ${signature}`);
+    return signature;
   }
 
   /**
@@ -169,17 +367,22 @@ export class DriftService implements OnModuleInit {
 
   /**
    * Get account activation status and wallet balances
+   * Shows agent wallet SOL (for gas) and user's Drift USDC balance
+   * isActivated is based on whether user has a Drift account with the agent as delegate
    */
-  async getAccountStatus(userId: string): Promise<{
+  async getAccountStatus(userId: string, userWalletAddress?: string): Promise<{
     isActivated: boolean;
     activatedAt: Date | null;
     minDepositUsd: number;
     agentWallet: {
       publicKey: string;
       solBalance: number;
-      usdcBalance: number;
+      isDelegated: boolean;
     } | null;
-    hasDriftAccount: boolean;
+    userDriftBalance: {
+      usdcBalance: string;
+      hasDriftAccount: boolean;
+    };
   }> {
     const agentWallet = await this.agentWalletsService.getAgentWalletByUserId(userId);
     
@@ -189,32 +392,42 @@ export class DriftService implements OnModuleInit {
         activatedAt: null,
         minDepositUsd: this.jupiterService.getMinDepositUsdc(),
         agentWallet: null,
-        hasDriftAccount: false,
+        userDriftBalance: {
+          usdcBalance: '0',
+          hasDriftAccount: false,
+        },
       };
     }
 
-    const publicKey = new PublicKey(agentWallet.publicKey);
+    const agentPublicKey = new PublicKey(agentWallet.publicKey);
     
-    // Get balances
-    const [solBalance, usdcBalance] = await Promise.all([
-      this.jupiterService.getSolBalance(publicKey),
-      this.jupiterService.getUsdcBalance(publicKey),
-    ]);
+    // Get agent wallet SOL balance (for gas)
+    const solBalance = await this.jupiterService.getSolBalance(agentPublicKey);
 
-    // Check if Drift account exists (simplified - would need driftClient)
-    // For now, we assume if activated, Drift account exists
-    const hasDriftAccount = agentWallet.isActivated;
+    // Get user's Drift USDC balance (if wallet address provided)
+    let userDriftBalance = { usdcBalance: '0', hasDriftAccount: false };
+    let isActivated = false;
+    
+    if (userWalletAddress) {
+      const driftBalance = await this.checkMainWalletDriftBalance(userWalletAddress);
+      userDriftBalance = {
+        usdcBalance: driftBalance.usdcBalance,
+        hasDriftAccount: driftBalance.hasDriftAccount,
+      };
+      // User is activated if they have a Drift account and agent is delegated
+      isActivated = driftBalance.hasDriftAccount && agentWallet.isDelegated;
+    }
 
     return {
-      isActivated: agentWallet.isActivated,
+      isActivated,
       activatedAt: agentWallet.activatedAt,
       minDepositUsd: this.jupiterService.getMinDepositUsdc(),
       agentWallet: {
         publicKey: agentWallet.publicKey,
         solBalance,
-        usdcBalance,
+        isDelegated: agentWallet.isDelegated,
       },
-      hasDriftAccount,
+      userDriftBalance,
     };
   }
 
@@ -285,11 +498,29 @@ export class DriftService implements OnModuleInit {
   ): Promise<string> {
     let optionalParams;
 
-    switch (params.orderType) {
+    // Map string orderType to Drift SDK OrderType enum
+    const orderTypeMap: Record<string, OrderType> = {
+      'market': OrderType.MARKET,
+      'limit': OrderType.LIMIT,
+      'triggerMarket': OrderType.TRIGGER_MARKET,
+      'triggerLimit': OrderType.TRIGGER_LIMIT,
+      'oracle': OrderType.ORACLE,
+    };
+
+    // Map string direction to Drift SDK PositionDirection enum
+    const directionMap: Record<string, PositionDirection> = {
+      'long': PositionDirection.LONG,
+      'short': PositionDirection.SHORT,
+    };
+
+    const orderType = orderTypeMap[params.orderType as string] ?? params.orderType;
+    const direction = directionMap[params.direction as string] ?? params.direction;
+
+    switch (orderType) {
       case OrderType.MARKET:
         optionalParams = getMarketOrderParams({
           marketIndex: params.marketIndex,
-          direction: params.direction,
+          direction,
           baseAssetAmount: params.baseAssetAmount,
           reduceOnly: params.reduceOnly,
         });
@@ -298,7 +529,7 @@ export class DriftService implements OnModuleInit {
       case OrderType.LIMIT:
         optionalParams = getLimitOrderParams({
           marketIndex: params.marketIndex,
-          direction: params.direction,
+          direction,
           baseAssetAmount: params.baseAssetAmount,
           price: params.price!,
           reduceOnly: params.reduceOnly,
@@ -309,10 +540,10 @@ export class DriftService implements OnModuleInit {
       case OrderType.TRIGGER_MARKET:
         optionalParams = getTriggerMarketOrderParams({
           marketIndex: params.marketIndex,
-          direction: params.direction,
+          direction,
           baseAssetAmount: params.baseAssetAmount,
           triggerPrice: params.triggerPrice!,
-          triggerCondition: params.direction === PositionDirection.LONG 
+          triggerCondition: direction === PositionDirection.LONG 
             ? OrderTriggerCondition.ABOVE 
             : OrderTriggerCondition.BELOW,
           reduceOnly: params.reduceOnly ?? true,
@@ -322,11 +553,11 @@ export class DriftService implements OnModuleInit {
       case OrderType.TRIGGER_LIMIT:
         optionalParams = getTriggerLimitOrderParams({
           marketIndex: params.marketIndex,
-          direction: params.direction,
+          direction,
           baseAssetAmount: params.baseAssetAmount,
           price: params.price!,
           triggerPrice: params.triggerPrice!,
-          triggerCondition: params.direction === PositionDirection.LONG 
+          triggerCondition: direction === PositionDirection.LONG 
             ? OrderTriggerCondition.ABOVE 
             : OrderTriggerCondition.BELOW,
           reduceOnly: params.reduceOnly ?? true,
@@ -431,11 +662,11 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
-   * Deposit collateral with payment method handling
+   * Deposit collateral with automatic account initialization
    * - USDC: Direct deposit
    * - SOL: Swap to USDC via Jupiter, then deposit
+   * - If Drift account doesn't exist, initializes it first (costs ~0.002 SOL)
    * Minimum deposit: $5
-   * First deposit activates the account
    */
   async deposit(
     driftClient: DriftClient,
@@ -444,8 +675,11 @@ export class DriftService implements OnModuleInit {
   ): Promise<{
     signature: string;
     swapSignature?: string;
+    initSignature?: string;
+    delegateSignature?: string;
     isFirstDeposit: boolean;
     depositedAmount: string;
+    message: string;
   }> {
     const MIN_DEPOSIT_USD = 5;
     const depositAmountUsd = Number(params.amount);
@@ -455,16 +689,37 @@ export class DriftService implements OnModuleInit {
       throw new Error(`Minimum deposit is $${MIN_DEPOSIT_USD}`);
     }
 
-    // Get agent wallet to check activation status
+    // Get agent wallet
     const agentWallet = await this.agentWalletsService.getAgentWalletByUserId(userId);
     if (!agentWallet) {
       throw new Error('Agent wallet not found');
     }
 
-    // Check/initialize Drift account if needed
+    const isFirstDeposit = !agentWallet.isActivated;
+    let initSignature: string | undefined;
+    let delegateSignature: string | undefined;
+
+    // Check if Drift account exists, initialize if not
     const user = driftClient.getUser();
     const authority = user.getUserAccount().authority;
-    const isFirstDeposit = !agentWallet.isActivated;
+    const hasDriftAccount = await this.hasDriftAccount(driftClient, authority);
+    
+    if (!hasDriftAccount) {
+      this.logger.log(`Initializing Drift account for user ${userId}`);
+      const agentPublicKey = new PublicKey(agentWallet.publicKey);
+      const initResult = await this.initializeDriftAccount(driftClient, agentPublicKey);
+      initSignature = initResult.initSignature;
+      delegateSignature = initResult.delegateSignature;
+      this.logger.log(`Drift account initialized with delegate: ${initSignature}`);
+    } else {
+      // Check if delegate is set correctly
+      const currentDelegate = await this.getUserDelegate(driftClient);
+      const agentPublicKey = new PublicKey(agentWallet.publicKey);
+      if (!currentDelegate || currentDelegate.toString() !== agentPublicKey.toString()) {
+        this.logger.log(`Updating delegate to agent wallet ${agentWallet.publicKey}`);
+        delegateSignature = await this.updateUserDelegate(driftClient, agentPublicKey);
+      }
+    }
 
     let swapSignature: string | undefined;
 
@@ -521,11 +776,18 @@ export class DriftService implements OnModuleInit {
       this.logger.log(`Account activated for user ${userId}`);
     }
 
+    const message = initSignature 
+      ? `Account initialized and ${depositAmountUsd} USDC deposited successfully`
+      : `${depositAmountUsd} USDC deposited successfully`;
+
     return {
       signature: txSig,
       swapSignature,
+      initSignature,
+      delegateSignature,
       isFirstDeposit,
       depositedAmount: usdcAmount.toString(),
+      message,
     };
   }
 
@@ -605,6 +867,100 @@ export class DriftService implements OnModuleInit {
   async getMarketPrice(driftClient: DriftClient, marketIndex: number): Promise<string> {
     const oracleData = driftClient.getOracleDataForPerpMarket(marketIndex);
     return oracleData.price.toString();
+  }
+
+  /**
+   * Check if user's main wallet already has USDC in Drift
+   * For users who deposited to Drift before using TradeClub
+   */
+  async checkMainWalletDriftBalance(
+    walletAddress: string,
+  ): Promise<{
+    hasDriftAccount: boolean;
+    usdcBalance: string;
+    hasExistingDeposit: boolean;
+    message: string;
+  }> {
+    try {
+      const authority = new PublicKey(walletAddress);
+      
+      // Try to get user account public key for subaccount 0
+      const userAccountPublicKey = await getUserAccountPublicKey(
+        new PublicKey('dRiftyHA39MWEi3m9aunc5MzRF1JYuBsbn6VPcn33UH'), // Drift program ID (mainnet/devnet same)
+        authority,
+        0,
+      );
+
+      // Check if account exists
+      const accountInfo = await this.connection.getAccountInfo(userAccountPublicKey);
+      
+      if (!accountInfo) {
+        return {
+          hasDriftAccount: false,
+          usdcBalance: '0',
+          hasExistingDeposit: false,
+          message: 'No existing Drift account found for this wallet',
+        };
+      }
+
+      // Account exists - need to fetch USDC balance
+      // For this we need a read-only drift client
+      const wallet = {
+        publicKey: authority,
+        signTransaction: async () => { throw new Error('Read only'); },
+        signAllTransactions: async () => { throw new Error('Read only'); },
+      } as any;
+
+      const driftClient = new DriftClient({
+        connection: this.connection,
+        wallet,
+        env: this.isDevnet ? 'devnet' : 'mainnet-beta',
+        opts: { commitment: 'confirmed' },
+      });
+
+      await driftClient.subscribe();
+
+      try {
+        const user = driftClient.getUser();
+        
+        // Get USDC spot position (market index 0)
+        const spotPosition = user.getSpotPosition(0);
+        const usdcBalance = spotPosition?.scaledBalance.toString() || '0';
+        
+        // Convert from drift's internal format to USDC
+        // Drift stores balances with precision, we need to format it
+        const usdcBalanceNum = user.getTokenAmount(0).toNumber() / 1_000_000;
+
+        await driftClient.unsubscribe();
+
+        const hasDeposit = usdcBalanceNum > 0;
+
+        return {
+          hasDriftAccount: true,
+          usdcBalance: usdcBalanceNum.toFixed(6),
+          hasExistingDeposit: hasDeposit,
+          message: hasDeposit 
+            ? `Found ${usdcBalanceNum.toFixed(2)} USDC in your Drift account`
+            : 'Drift account exists but no USDC balance found',
+        };
+      } catch (error) {
+        await driftClient.unsubscribe();
+        return {
+          hasDriftAccount: true,
+          usdcBalance: '0',
+          hasExistingDeposit: false,
+          message: 'Drift account exists but could not read balance',
+        };
+      }
+    } catch (error) {
+      this.logger.error(`Error checking external balance: ${error.message}`);
+      return {
+        hasDriftAccount: false,
+        usdcBalance: '0',
+        hasExistingDeposit: false,
+        message: 'Could not check Drift balance',
+      };
+    }
   }
 }
 

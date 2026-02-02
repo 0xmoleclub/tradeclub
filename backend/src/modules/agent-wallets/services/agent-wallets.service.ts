@@ -76,6 +76,31 @@ export class AgentWalletsService {
   }
 
   /**
+   * Get agent wallet by user ID (safe - excludes encryptedSecretKey)
+   */
+  async getAgentWalletSafe(userId: string): Promise<Omit<AgentWallet, 'encryptedSecretKey'> | null> {
+    const wallet = await this.prisma.agentWallet.findUnique({
+      where: { userId },
+      select: {
+        id: true,
+        userId: true,
+        publicKey: true,
+        isDelegated: true,
+        delegatedAt: true,
+        subaccountIndex: true,
+        status: true,
+        isActivated: true,
+        activatedAt: true,
+        gasBalance: true,
+        createdAt: true,
+        updatedAt: true,
+        encryptionVersion: true,
+      },
+    });
+    return wallet;
+  }
+
+  /**
    * Get agent wallet by public key
    */
   async getAgentWalletByPublicKey(
@@ -130,6 +155,27 @@ export class AgentWalletsService {
         isDelegated: false,
         status: AgentWalletStatus.REVOKED,
         delegatedAt: null,
+      },
+    });
+  }
+
+  /**
+   * Mark agent wallet as activated (Drift account created)
+   */
+  async markAsActivated(walletId: string): Promise<AgentWallet> {
+    const wallet = await this.prisma.agentWallet.findUnique({
+      where: { id: walletId },
+    });
+
+    if (!wallet) {
+      throw new NotFoundException('Agent wallet not found');
+    }
+
+    return this.prisma.agentWallet.update({
+      where: { id: walletId },
+      data: {
+        isActivated: true,
+        activatedAt: new Date(),
       },
     });
   }

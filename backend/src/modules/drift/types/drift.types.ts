@@ -3,9 +3,9 @@ import { MarketType, OrderType, PositionDirection } from '@drift-labs/sdk';
 
 export interface PlaceOrderParams {
   marketIndex: number;
-  direction: PositionDirection;
+  direction: PositionDirection | string;
   baseAssetAmount: BN;
-  orderType: OrderType;
+  orderType: OrderType | string;
   marketType?: MarketType;
   price?: BN;
   triggerPrice?: BN;
