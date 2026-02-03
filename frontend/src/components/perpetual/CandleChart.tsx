@@ -145,7 +145,7 @@ export const CandleChart = ({ symbol = "BTC-PERP" }: CandleChartProps) => {
       <div ref={chartContainerRef} className="w-full h-full" />
 
       {/* Interval Buttons - Bottom Right */}
-      <div className="absolute bottom-3 right-3 z-10 flex gap-0.5 bg-black/80 p-1 rounded-lg border border-white/20 backdrop-blur-sm">
+      <div className="absolute bottom-12 right-18 z-10 flex gap-0.5 bg-black/80 p-1 rounded-lg border border-white/20 backdrop-blur-sm">
         {INTERVALS.map((tf) => (
           <button
             key={tf.value}

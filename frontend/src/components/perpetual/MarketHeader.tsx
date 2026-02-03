@@ -182,7 +182,7 @@ export const MarketHeader = ({ selectedMarket, onMarketChange }: MarketHeaderPro
             <div className="flex items-center gap-1.5">
               <Activity size={12} className="text-magenta-400" />
               <div className="flex flex-col">
-                <span className="text-[9px] text-gray-500 uppercase leading-none">OI</span>
+                <span className="text-[9px] text-gray-500 uppercase leading-none">Open Interest</span>
                 <span className="text-xs font-mono text-white">
                   {formatNumber(currentMarket.openInterestUsd || currentMarket.openInterest)}
                 </span>
