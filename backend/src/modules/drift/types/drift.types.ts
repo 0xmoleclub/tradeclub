@@ -90,13 +90,15 @@ export interface MarketInfo {
   askPrice: string;
   volume24h: string;
   openInterest: string;
+  openInterestUsd?: string;       // Open interest in USD
   maxLeverage: number;
   initialMarginRatio: string;
   maintenanceMarginRatio: string;
   // Extended market data
-  fundingRate?: string;           // Current funding rate ( hourly)
-  fundingRateLong?: string;       // Funding rate for longs
-  fundingRateShort?: string;      // Funding rate for shorts
+  fundingRate?: string;           // Current hourly funding rate (%)
+  fundingRateLong?: string;       // Funding rate for longs (%)
+  fundingRateShort?: string;      // Funding rate for shorts (%)
+  last24hAvgFundingRate?: string; // 24h average funding rate (%)
   nextFundingTs?: number;         // Next funding timestamp
   priceChange24h?: string;        // 24h price change
   priceChange24hPercent?: string; // 24h price change %

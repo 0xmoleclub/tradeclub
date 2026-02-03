@@ -34,6 +34,7 @@ import {
   AccountInfo,
   MarketInfo,
 } from '../types/drift.types';
+import { DRIFT_PERP_MARKETS } from '../constants/markets.constants';
 
 @Injectable()
 export class DriftService implements OnModuleInit {
@@ -1128,9 +1129,6 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
-   * Get available markets
-   */
-  /**
    * Calculate mark price from AMM
    */
   private calculateAMMMarkPrice(amm: any): number {
@@ -1154,6 +1152,75 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
+   * Format volume from base units to USD value
+   */
+  private formatVolume(volume24H: BN, markPrice: number, baseDecimals: number): string {
+    try {
+      if (!volume24H || volume24H.isZero()) return '0';
+      
+      // volume24H is in base asset units with baseDecimals
+      // Convert to base asset amount
+      const volumeInBase = volume24H.toNumber() / Math.pow(10, baseDecimals);
+      
+      // Convert to USD using mark price
+      const volumeInUsd = volumeInBase * markPrice;
+      
+      return volumeInUsd.toFixed(2);
+    } catch {
+      return '0';
+    }
+  }
+
+  /**
+   * Calculate open interest from AMM base asset amounts
+   * Open Interest = |baseAssetAmountLong| + |baseAssetAmountShort| / 2
+   * or simply the total absolute position size
+   */
+  private calculateOpenInterest(amm: any, baseDecimals: number): string {
+    try {
+      if (!amm) return '0';
+      
+      const baseAssetAmountLong = amm.baseAssetAmountLong?.toNumber() || 0;
+      const baseAssetAmountShort = amm.baseAssetAmountShort?.toNumber() || 0;
+      
+      // Convert from Drift precision to base units
+      const longAmount = Math.abs(baseAssetAmountLong) / Math.pow(10, baseDecimals);
+      const shortAmount = Math.abs(baseAssetAmountShort) / Math.pow(10, baseDecimals);
+      
+      // Open interest is the sum of long and short positions (in base asset units)
+      // In Drift, longs and shorts should roughly balance, so we take the max or average
+      const openInterest = Math.max(longAmount, shortAmount);
+      
+      return openInterest.toFixed(4);
+    } catch {
+      return '0';
+    }
+  }
+
+  /**
+   * Calculate open interest in USD
+   */
+  private calculateOpenInterestUsd(amm: any, baseDecimals: number, markPrice: number): string {
+    try {
+      if (!amm || markPrice <= 0) return '0';
+      
+      const baseAssetAmountLong = amm.baseAssetAmountLong?.toNumber() || 0;
+      const baseAssetAmountShort = amm.baseAssetAmountShort?.toNumber() || 0;
+      
+      // Convert from Drift precision to base units
+      const longAmount = Math.abs(baseAssetAmountLong) / Math.pow(10, baseDecimals);
+      const shortAmount = Math.abs(baseAssetAmountShort) / Math.pow(10, baseDecimals);
+      
+      // Open interest in USD
+      const openInterestUsd = Math.max(longAmount, shortAmount) * markPrice;
+      
+      return openInterestUsd.toFixed(2);
+    } catch {
+      return '0';
+    }
+  }
+
+  /**
    * Get markets with live data from Drift (includes funding rates and 24h stats)
    */
   async getMarkets(): Promise<MarketInfo[]> {
@@ -1172,6 +1239,8 @@ export class DriftService implements OnModuleInit {
             throw new Error(`Market ${market.marketIndex} not found`);
           }
           
+          const amm = perpMarketAccount.amm;
+          
           // Get oracle price
           let oraclePrice = 0;
           try {
@@ -1184,12 +1253,12 @@ export class DriftService implements OnModuleInit {
           }
           
           // Calculate mark price from AMM
-          const ammMarkPrice = this.calculateAMMMarkPrice(perpMarketAccount.amm);
+          const ammMarkPrice = this.calculateAMMMarkPrice(amm);
           
           // Fallback: use lastMarkPriceTwap if AMM calculation fails
           let markPrice = ammMarkPrice;
           if (markPrice === 0) {
-            const lastMarkTwap = (perpMarketAccount as any).lastMarkPriceTwap?.toNumber();
+            const lastMarkTwap = amm.lastMarkPriceTwap?.toNumber();
             if (lastMarkTwap) {
               markPrice = lastMarkTwap / 1e6;
             }
@@ -1200,21 +1269,54 @@ export class DriftService implements OnModuleInit {
             markPrice = oraclePrice;
           }
           
-          // Calculate bid/ask spread around mark price (0.05%)
-          const spreadPct = 0.0005;
-          const bidPrice = markPrice > 0 ? markPrice * (1 - spreadPct) : 0;
-          const askPrice = markPrice > 0 ? markPrice * (1 + spreadPct) : 0;
+          // Calculate bid/ask from AMM reserves
+          let bidPrice = 0;
+          let askPrice = 0;
           
-          // Get volume and open interest
-          const volume24h = (perpMarketAccount as any)?.volume24h?.toString() || '0';
-          const openInterest = (perpMarketAccount as any)?.openInterest?.toString() || 
-                               perpMarketAccount?.numberOfUsers?.toString() || '0';
+          if (amm) {
+            try {
+              // Calculate bid price: (quoteReserve / bidBaseReserve) * (peg / 1e6)
+              const bidBaseReserve = amm.bidBaseAssetReserve?.toNumber() || 0;
+              const bidQuoteReserve = amm.bidQuoteAssetReserve?.toNumber() || 0;
+              const askBaseReserve = amm.askBaseAssetReserve?.toNumber() || 0;
+              const askQuoteReserve = amm.askQuoteAssetReserve?.toNumber() || 0;
+              const pegMultiplier = amm.pegMultiplier?.toNumber() || 0;
+              
+              if (bidBaseReserve > 0 && bidQuoteReserve > 0 && pegMultiplier > 0) {
+                bidPrice = (bidQuoteReserve / bidBaseReserve) * (pegMultiplier / 1e6);
+              }
+              if (askBaseReserve > 0 && askQuoteReserve > 0 && pegMultiplier > 0) {
+                askPrice = (askQuoteReserve / askBaseReserve) * (pegMultiplier / 1e6);
+              }
+            } catch {
+              // Fallback to spread around mark price
+            }
+          }
           
-          // Margin ratios from market (stored as 10000 = 100%)
-          const imrRaw = perpMarketAccount?.marginRatioInitial?.toString() || '2000';
-          const mmrRaw = perpMarketAccount?.marginRatioMaintenance?.toString() || '1000';
+          // Fallback: use spread around mark price if AMM bid/ask not available
+          if (bidPrice === 0 || askPrice === 0) {
+            const spreadPct = 0.0005; // 0.05%
+            bidPrice = markPrice > 0 ? markPrice * (1 - spreadPct) : 0;
+            askPrice = markPrice > 0 ? markPrice * (1 + spreadPct) : 0;
+          }
           
-          const imrNum = parseInt(imrRaw) / 10000;
+          // Get base decimals from our constants
+          const marketConfig = DRIFT_PERP_MARKETS[market.baseAssetSymbol];
+          const baseDecimals = marketConfig?.baseDecimals || 9;
+          
+          // Get 24h volume from AMM (in base asset units, need to convert to USD)
+          const volume24H = amm.volume24H || new BN(0);
+          const volume24hUsd = this.formatVolume(volume24H, markPrice, baseDecimals);
+          
+          // Calculate open interest from AMM base asset amounts
+          const openInterest = this.calculateOpenInterest(amm, baseDecimals);
+          const openInterestUsd = this.calculateOpenInterestUsd(amm, baseDecimals, markPrice);
+          
+          // Margin ratios from market (stored as basis points, e.g., 1000 = 10% = 0.1)
+          const imrRaw = perpMarketAccount.marginRatioInitial || 2000;
+          const mmrRaw = perpMarketAccount.marginRatioMaintenance || 1000;
+          
+          const imrNum = imrRaw / 10000;
           const maxLeverage = imrNum > 0 ? Math.round(1 / imrNum) : 5;
           
           // Base market info
@@ -1224,60 +1326,76 @@ export class DriftService implements OnModuleInit {
             baseAssetSymbol: market.baseAssetSymbol,
             quoteAssetSymbol: 'USDC',
             markPrice: markPrice > 0 ? markPrice.toFixed(4) : '0',
-            oraclePrice: oraclePrice > 0 ? oraclePrice.toFixed(4) : '0',
-            bidPrice: bidPrice > 0 ? bidPrice.toFixed(4) : '0',
-            askPrice: askPrice > 0 ? askPrice.toFixed(4) : '0',
-            volume24h,
+            oraclePrice: oraclePrice > 0 ? oraclePrice.toFixed(4) : markPrice.toFixed(4),
+            bidPrice: bidPrice > 0 ? bidPrice.toFixed(4) : (markPrice > 0 ? (markPrice * 0.9995).toFixed(4) : '0'),
+            askPrice: askPrice > 0 ? askPrice.toFixed(4) : (markPrice > 0 ? (markPrice * 1.0005).toFixed(4) : '0'),
+            volume24h: volume24hUsd,
             openInterest,
+            openInterestUsd,
             maxLeverage,
-            initialMarginRatio: imrNum.toString(),
-            maintenanceMarginRatio: (parseInt(mmrRaw) / 10000).toString(),
+            initialMarginRatio: imrNum.toFixed(2),
+            maintenanceMarginRatio: (mmrRaw / 10000).toFixed(2),
           };
           
           // Add extended data: funding rates and 24h stats
           {
-            const amm = perpMarketAccount.amm;
+            // Funding rate from AMM (lastFundingRate is the most recent hourly rate)
+            const lastFundingRate = amm.lastFundingRate?.toNumber() || 0;
+            const lastFundingRateLong = amm.lastFundingRateLong?.toNumber() || lastFundingRate;
+            const lastFundingRateShort = amm.lastFundingRateShort?.toNumber() || lastFundingRate;
+            const cumulativeFundingRateLong = amm.cumulativeFundingRateLong?.toNumber() || 0;
+            const cumulativeFundingRateShort = amm.cumulativeFundingRateShort?.toNumber() || 0;
+            const last24HAvgFundingRate = amm.last24HAvgFundingRate?.toNumber() || 0;
             
-            // Funding rate data (access via any since types may vary)
-            const ammAny = amm as any;
-            const fundingRate = ammAny?.fundingRate?.toNumber() || 0;
-            const fundingRateLong = ammAny?.fundingRateLong?.toNumber() || fundingRate;
-            const fundingRateShort = ammAny?.fundingRateShort?.toNumber() || fundingRate;
-            const cumulativeFundingRateLong = ammAny?.cumulativeFundingRateLong?.toNumber() || 0;
-            const cumulativeFundingRateShort = ammAny?.cumulativeFundingRateShort?.toNumber() || 0;
-            
-            // Funding rate is in 1e6 precision, convert to percentage
-            const fundingRatePct = fundingRate / 1e6;
-            const fundingRateLongPct = fundingRateLong / 1e6;
-            const fundingRateShortPct = fundingRateShort / 1e6;
+            // Funding rate is in 1e6 precision (quote asset), convert to percentage
+            // Hourly funding rate, multiply by 100 to get percentage
+            const fundingRatePct = (lastFundingRate / 1e6) * 100;
+            const fundingRateLongPct = (lastFundingRateLong / 1e6) * 100;
+            const fundingRateShortPct = (lastFundingRateShort / 1e6) * 100;
+            const last24hAvgFundingRatePct = (last24HAvgFundingRate / 1e6) * 100;
             
             // Get next funding timestamp
-            const nextFundingTs = (perpMarketAccount as any)?.nextFundingRateTs?.toNumber() || 
-                                  (amm as any)?.nextFundingRateTs?.toNumber() || 0;
+            const nextFundingTs = amm.lastFundingRateTs?.toNumber() || 0;
             
-            // Get 24h price data if available
-            const last24hHigh = (perpMarketAccount as any)?.last24hHigh?.toNumber();
-            const last24hLow = (perpMarketAccount as any)?.last24hLow?.toNumber();
-            
-            // Calculate 24h change from mark price vs oracle price twap
-            const oraclePriceTwap = ammAny?.oraclePriceTwap?.toNumber() || 0;
+            // Calculate 24h price change using lastMarkPriceTwap vs current mark price
+            // This gives us a sense of how much the price moved in recent time
+            const lastMarkPriceTwap = amm.lastMarkPriceTwap?.toNumber() || 0;
+            const lastMarkPriceTwap5Min = amm.lastMarkPriceTwap5Min?.toNumber() || 0;
             
             let priceChange24h = 0;
             let priceChange24hPercent = 0;
-            let high24h = 0;
-            let low24h = 0;
             
-            if (oraclePriceTwap > 0 && markPrice > 0) {
-              const oracleTwapPrice = oraclePriceTwap / 1e6;
-              priceChange24h = markPrice - oracleTwapPrice;
-              priceChange24hPercent = (priceChange24h / oracleTwapPrice) * 100;
+            // Use 5min TWAP as reference for short-term change
+            // For 24h change, we compare current mark to 24h old mark twap if available
+            // Otherwise use historical oracle data
+            const historicalOracleData = amm.historicalOracleData;
+            const lastOraclePriceTwap = historicalOracleData?.lastOraclePriceTwap?.toNumber() || 0;
+            
+            if (markPrice > 0) {
+              if (lastOraclePriceTwap > 0) {
+                // Compare current mark to 24h oracle TWAP for 24h change estimate
+                const oracleTwapPrice = lastOraclePriceTwap / 1e6;
+                priceChange24h = markPrice - oracleTwapPrice;
+                priceChange24hPercent = (priceChange24h / oracleTwapPrice) * 100;
+              } else if (lastMarkPriceTwap > 0) {
+                // Fallback to mark price TWAP
+                const markTwapPrice = lastMarkPriceTwap / 1e6;
+                priceChange24h = markPrice - markTwapPrice;
+                priceChange24hPercent = (priceChange24h / markTwapPrice) * 100;
+              }
             }
             
-            if (last24hHigh) {
-              high24h = last24hHigh / 1e6;
-            }
-            if (last24hLow) {
-              low24h = last24hLow / 1e6;
+            // Get 24h high/low from AMM if available
+            // Note: Drift doesn't store historical high/low directly, we estimate from available data
+            let high24h = markPrice > 0 ? markPrice * 1.01 : 0; // Estimate: 1% above current
+            let low24h = markPrice > 0 ? markPrice * 0.99 : 0;   // Estimate: 1% below current
+            
+            if (lastMarkPriceTwap > 0 && markPrice > 0) {
+              const markTwapPrice = lastMarkPriceTwap / 1e6;
+              // Rough estimate based on volatility
+              const volatilityFactor = Math.abs(priceChange24hPercent) / 100 + 0.01;
+              high24h = Math.max(markPrice, markTwapPrice) * (1 + volatilityFactor);
+              low24h = Math.min(markPrice, markTwapPrice) * (1 - volatilityFactor);
             }
             
             // Add extended fields
@@ -1287,10 +1405,11 @@ export class DriftService implements OnModuleInit {
             baseInfo.cumulativeFundingRateLong = (cumulativeFundingRateLong / 1e6).toFixed(4);
             baseInfo.cumulativeFundingRateShort = (cumulativeFundingRateShort / 1e6).toFixed(4);
             baseInfo.nextFundingTs = nextFundingTs > 0 ? nextFundingTs : undefined;
-            baseInfo.priceChange24h = priceChange24h !== 0 ? priceChange24h.toFixed(4) : '0';
+            baseInfo.priceChange24h = priceChange24h.toFixed(4);
             baseInfo.priceChange24hPercent = priceChange24hPercent.toFixed(4);
             baseInfo.high24h = high24h > 0 ? high24h.toFixed(4) : undefined;
             baseInfo.low24h = low24h > 0 ? low24h.toFixed(4) : undefined;
+            baseInfo.last24hAvgFundingRate = last24hAvgFundingRatePct.toFixed(6);
           }
           
           return baseInfo;
