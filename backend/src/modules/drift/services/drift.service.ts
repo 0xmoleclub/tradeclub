@@ -1154,7 +1154,7 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
-   * Get markets with live data from Drift
+   * Get markets with live data from Drift (includes funding rates and 24h stats)
    */
   async getMarkets(): Promise<MarketInfo[]> {
     const perpMarkets = this.isDevnet ? DevnetPerpMarkets : MainnetPerpMarkets;
@@ -1217,7 +1217,8 @@ export class DriftService implements OnModuleInit {
           const imrNum = parseInt(imrRaw) / 10000;
           const maxLeverage = imrNum > 0 ? Math.round(1 / imrNum) : 5;
           
-          return {
+          // Base market info
+          const baseInfo: MarketInfo = {
             marketIndex: market.marketIndex,
             symbol: market.symbol,
             baseAssetSymbol: market.baseAssetSymbol,
@@ -1232,6 +1233,67 @@ export class DriftService implements OnModuleInit {
             initialMarginRatio: imrNum.toString(),
             maintenanceMarginRatio: (parseInt(mmrRaw) / 10000).toString(),
           };
+          
+          // Add extended data: funding rates and 24h stats
+          {
+            const amm = perpMarketAccount.amm;
+            
+            // Funding rate data (access via any since types may vary)
+            const ammAny = amm as any;
+            const fundingRate = ammAny?.fundingRate?.toNumber() || 0;
+            const fundingRateLong = ammAny?.fundingRateLong?.toNumber() || fundingRate;
+            const fundingRateShort = ammAny?.fundingRateShort?.toNumber() || fundingRate;
+            const cumulativeFundingRateLong = ammAny?.cumulativeFundingRateLong?.toNumber() || 0;
+            const cumulativeFundingRateShort = ammAny?.cumulativeFundingRateShort?.toNumber() || 0;
+            
+            // Funding rate is in 1e6 precision, convert to percentage
+            const fundingRatePct = fundingRate / 1e6;
+            const fundingRateLongPct = fundingRateLong / 1e6;
+            const fundingRateShortPct = fundingRateShort / 1e6;
+            
+            // Get next funding timestamp
+            const nextFundingTs = (perpMarketAccount as any)?.nextFundingRateTs?.toNumber() || 
+                                  (amm as any)?.nextFundingRateTs?.toNumber() || 0;
+            
+            // Get 24h price data if available
+            const last24hHigh = (perpMarketAccount as any)?.last24hHigh?.toNumber();
+            const last24hLow = (perpMarketAccount as any)?.last24hLow?.toNumber();
+            
+            // Calculate 24h change from mark price vs oracle price twap
+            const oraclePriceTwap = ammAny?.oraclePriceTwap?.toNumber() || 0;
+            
+            let priceChange24h = 0;
+            let priceChange24hPercent = 0;
+            let high24h = 0;
+            let low24h = 0;
+            
+            if (oraclePriceTwap > 0 && markPrice > 0) {
+              const oracleTwapPrice = oraclePriceTwap / 1e6;
+              priceChange24h = markPrice - oracleTwapPrice;
+              priceChange24hPercent = (priceChange24h / oracleTwapPrice) * 100;
+            }
+            
+            if (last24hHigh) {
+              high24h = last24hHigh / 1e6;
+            }
+            if (last24hLow) {
+              low24h = last24hLow / 1e6;
+            }
+            
+            // Add extended fields
+            baseInfo.fundingRate = fundingRatePct.toFixed(6);
+            baseInfo.fundingRateLong = fundingRateLongPct.toFixed(6);
+            baseInfo.fundingRateShort = fundingRateShortPct.toFixed(6);
+            baseInfo.cumulativeFundingRateLong = (cumulativeFundingRateLong / 1e6).toFixed(4);
+            baseInfo.cumulativeFundingRateShort = (cumulativeFundingRateShort / 1e6).toFixed(4);
+            baseInfo.nextFundingTs = nextFundingTs > 0 ? nextFundingTs : undefined;
+            baseInfo.priceChange24h = priceChange24h !== 0 ? priceChange24h.toFixed(4) : '0';
+            baseInfo.priceChange24hPercent = priceChange24hPercent.toFixed(4);
+            baseInfo.high24h = high24h > 0 ? high24h.toFixed(4) : undefined;
+            baseInfo.low24h = low24h > 0 ? low24h.toFixed(4) : undefined;
+          }
+          
+          return baseInfo;
         } catch (err) {
           console.error(`Error fetching market ${market.marketIndex}:`, err.message);
           // Return basic info if market data fetch fails

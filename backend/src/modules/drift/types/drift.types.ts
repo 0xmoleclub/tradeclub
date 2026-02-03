@@ -93,4 +93,15 @@ export interface MarketInfo {
   maxLeverage: number;
   initialMarginRatio: string;
   maintenanceMarginRatio: string;
+  // Extended market data
+  fundingRate?: string;           // Current funding rate ( hourly)
+  fundingRateLong?: string;       // Funding rate for longs
+  fundingRateShort?: string;      // Funding rate for shorts
+  nextFundingTs?: number;         // Next funding timestamp
+  priceChange24h?: string;        // 24h price change
+  priceChange24hPercent?: string; // 24h price change %
+  high24h?: string;               // 24h high
+  low24h?: string;                // 24h low
+  cumulativeFundingRateLong?: string;
+  cumulativeFundingRateShort?: string;
 }

@@ -633,7 +633,7 @@ export class DriftController {
   @ApiTags('Market Info')
   @ApiOperation({
     summary: 'Get available markets',
-    description: 'Returns all available perpetual markets',
+    description: 'Returns all available perpetual markets with funding rates, 24h stats, and open interest',
   })
   async getMarkets() {
     const markets = await this.driftService.getMarkets();
