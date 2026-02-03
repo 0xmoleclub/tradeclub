@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import Link from "next/link";
-import { ArrowLeft, MoreHorizontal, GripVertical } from "lucide-react";
+import { MoreHorizontal, GripVertical } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LaserBackground } from "@/components/ui/effects/LaserBackground";
 import { CandleChart } from "@/components/perpetual/CandleChart";
 import { OrderBook } from "@/components/perpetual/OrderBook";
 import { TradeHistory } from "@/components/perpetual/TradeHistory";
 import { PlaceOrder } from "@/components/perpetual/PlaceOrder";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 export default function PerpetualPage() {
   // --- Resizable Grid Logic ---
@@ -68,19 +68,17 @@ export default function PerpetualPage() {
       <div className="fixed inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#000000_90%)] z-0 pointer-events-none" />
 
       {/* Main Container */}
-      <div className="flex-1 w-full h-screen flex flex-col pt-4 pb-2 px-2 relative z-10" ref={containerRef}>
+      <div className="flex-1 w-full h-screen flex flex-col pb-2 px-2 relative z-10" ref={containerRef}>
         {/* Top Bar */}
-        <div className="flex items-center justify-between mb-2 px-2">
-          <Link href="/" className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors group">
-            <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-            <span className="text-xs font-bold uppercase tracking-widest">Back to Floor</span>
-          </Link>
-
-          <div className="flex items-center gap-2 px-3 py-1 bg-black/40 border border-white/10 rounded-full backdrop-blur-md">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-[9px] font-mono text-gray-400">NETWORK_LIVE: 14ms</span>
-          </div>
-        </div>
+        <PageHeader
+          title="Perpetual Trading"
+          backLabel="Back to Floor"
+          showNetworkStatus
+          rightContent={
+            <button className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-colors">Connect Wallet</button>
+          }
+          className="-mx-2 mb-2 w-[calc(100%+16px)]"
+        />
 
         {/* Resizable Layout */}
         <div className="flex-1 flex gap-1 overflow-hidden">

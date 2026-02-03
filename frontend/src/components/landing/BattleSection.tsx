@@ -20,10 +20,10 @@ export const BattleSection = () => {
           </div>
 
           <div className="flex gap-4">
-            <NeonButton icon={Swords} color="violence">
+            <NeonButton icon={Swords} color="violence" href="/perpetual">
               Join Queue
             </NeonButton>
-            <NeonButton icon={Eye} color="acid">
+            <NeonButton icon={Eye} color="acid" href="/watch-and-predict">
               Spectate
             </NeonButton>
           </div>
