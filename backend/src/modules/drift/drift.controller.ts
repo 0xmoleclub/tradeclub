@@ -20,6 +20,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Payload } from '../auth/auth.interface';
 import { MarketOrderDto, LimitOrderDto, ClosePositionMarketDto, ClosePositionLimitDto, PlaceTpSlDto, CancelOrderDto, DepositDto, WithdrawDto } from './dto';
+import { getMarketBySymbol, toBaseUnits, getAvailableSymbols } from './constants/markets.constants';
 import { PositionDirection, BN } from '@drift-labs/sdk';
 import { PublicKey } from '@solana/web3.js';
 
@@ -282,17 +283,30 @@ export class DriftController {
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Place market order',
-    description: 'Place a market order - executes immediately at best available price',
+    description: `Place a market order - executes immediately at best available price. Available symbols: ${getAvailableSymbols().join(', ')}`,
   })
   @ApiResponse({ status: 200, description: 'Market order placed' })
   async placeMarketOrder(@CurrentUser() user: Payload, @Body() dto: MarketOrderDto) {
     try {
+      // Convert symbol to market config
+      const market = getMarketBySymbol(dto.symbol);
+      if (!market) {
+        return {
+          success: false,
+          error: 'INVALID_SYMBOL',
+          message: `Unknown symbol: ${dto.symbol}. Available: ${getAvailableSymbols().join(', ')}`,
+        };
+      }
+
+      // Convert human-readable amount to base units
+      const baseAssetAmount = toBaseUnits(dto.amount, market.baseDecimals);
+
       const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
 
       const result = await this.driftService.placeMarketOrder(driftClient, {
-        marketIndex: dto.marketIndex,
+        marketIndex: market.marketIndex,
         direction: dto.direction as PositionDirection,
-        baseAssetAmount: new BN(dto.baseAssetAmount),
+        baseAssetAmount: new BN(baseAssetAmount),
       });
 
       await driftClient.unsubscribe();
@@ -301,6 +315,8 @@ export class DriftController {
         signature: result.signature, 
         orderType: result.type === 'LIMIT_FALLBACK' ? 'MARKET_FALLBACK' : 'MARKET',
         fallback: result.type === 'LIMIT_FALLBACK',
+        symbol: market.symbol,
+        amount: dto.amount,
       };
     } catch (error) {
       return this.handleOrderError(error);
@@ -311,22 +327,43 @@ export class DriftController {
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Place limit order',
-    description: 'Place a limit order - executes at specified price or better',
+    description: `Place a limit order - executes at specified price or better. Available symbols: ${getAvailableSymbols().join(', ')}`,
   })
   @ApiResponse({ status: 200, description: 'Limit order placed' })
   async placeLimitOrder(@CurrentUser() user: Payload, @Body() dto: LimitOrderDto) {
     try {
+      // Convert symbol to market config
+      const market = getMarketBySymbol(dto.symbol);
+      if (!market) {
+        return {
+          success: false,
+          error: 'INVALID_SYMBOL',
+          message: `Unknown symbol: ${dto.symbol}. Available: ${getAvailableSymbols().join(', ')}`,
+        };
+      }
+
+      // Convert human-readable amounts to base units
+      const baseAssetAmount = toBaseUnits(dto.amount, market.baseDecimals);
+      const priceInQuoteUnits = toBaseUnits(dto.price, market.quoteDecimals); // USDC has 6 decimals
+
       const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
 
       const txSig = await this.driftService.placeLimitOrder(driftClient, {
-        marketIndex: dto.marketIndex,
+        marketIndex: market.marketIndex,
         direction: dto.direction as PositionDirection,
-        baseAssetAmount: new BN(dto.baseAssetAmount),
-        price: new BN(dto.price),
+        baseAssetAmount: new BN(baseAssetAmount),
+        price: new BN(priceInQuoteUnits),
       });
 
       await driftClient.unsubscribe();
-      return { success: true, signature: txSig, orderType: 'LIMIT' };
+      return { 
+        success: true, 
+        signature: txSig, 
+        orderType: 'LIMIT',
+        symbol: market.symbol,
+        amount: dto.amount,
+        price: dto.price,
+      };
     } catch (error) {
       return this.handleOrderError(error);
     }
@@ -412,20 +449,29 @@ export class DriftController {
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Close position at market price',
-    description: 'Close an open position at the current market price. Automatically determines the correct size and direction. Uses reduceOnly to prevent accidental position reversal.',
+    description: `Close an open position at the current market price. Automatically determines the correct size and direction. Available symbols: ${getAvailableSymbols().join(', ')}`,
   })
   async closePositionMarket(@CurrentUser() user: Payload, @Body() dto: ClosePositionMarketDto) {
     try {
+      // Convert symbol to market config
+      const market = getMarketBySymbol(dto.symbol);
+      if (!market) {
+        return {
+          success: false,
+          error: 'INVALID_SYMBOL',
+          message: `Unknown symbol: ${dto.symbol}. Available: ${getAvailableSymbols().join(', ')}`,
+        };
+      }
+
       const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
       
-      const result = await this.driftService.closePositionMarket(driftClient, dto.marketIndex);
+      const result = await this.driftService.closePositionMarket(driftClient, market.marketIndex);
       
       await driftClient.unsubscribe();
       return {
         success: true,
         signature: result.signature,
-        closedAmount: result.closedAmount,
-        marketIndex: dto.marketIndex,
+        symbol: market.symbol,
         type: result.type === 'LIMIT_FALLBACK' ? 'CLOSE_MARKET_FALLBACK' : 'CLOSE_MARKET',
         fallback: result.type === 'LIMIT_FALLBACK',
       };
@@ -438,24 +484,36 @@ export class DriftController {
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
     summary: 'Close position at limit price',
-    description: 'Close an open position at a specified limit price. Automatically determines the correct size and direction. Uses reduceOnly to prevent accidental position reversal.',
+    description: `Close an open position at a specified limit price. Automatically determines the correct size and direction. Available symbols: ${getAvailableSymbols().join(', ')}`,
   })
   async closePositionLimit(@CurrentUser() user: Payload, @Body() dto: ClosePositionLimitDto) {
     try {
+      // Convert symbol to market config
+      const market = getMarketBySymbol(dto.symbol);
+      if (!market) {
+        return {
+          success: false,
+          error: 'INVALID_SYMBOL',
+          message: `Unknown symbol: ${dto.symbol}. Available: ${getAvailableSymbols().join(', ')}`,
+        };
+      }
+
+      // Convert human-readable price to quote units (USDC has 6 decimals)
+      const priceInQuoteUnits = toBaseUnits(dto.price, market.quoteDecimals);
+
       const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
       
       const result = await this.driftService.closePositionLimit(
         driftClient,
-        dto.marketIndex,
-        new BN(dto.price),
+        market.marketIndex,
+        new BN(priceInQuoteUnits),
       );
       
       await driftClient.unsubscribe();
       return {
         success: true,
         signature: result.signature,
-        closedAmount: result.closedAmount,
-        marketIndex: dto.marketIndex,
+        symbol: market.symbol,
         limitPrice: dto.price,
         type: 'CLOSE_LIMIT',
       };

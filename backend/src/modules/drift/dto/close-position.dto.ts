@@ -1,28 +1,30 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, Min, IsNumberString } from 'class-validator';
+import { IsString, IsNumberString, MinLength, MaxLength } from 'class-validator';
 
 export class ClosePositionMarketDto {
   @ApiProperty({
-    description: 'Market index to close position for (e.g., 0 for SOL-PERP)',
-    example: 0,
+    description: 'Asset symbol (e.g., SOL, BTC, ETH) - case insensitive',
+    example: 'SOL',
   })
-  @IsInt()
-  @Min(0)
-  marketIndex: number;
+  @IsString()
+  @MinLength(1)
+  @MaxLength(10)
+  symbol: string;
 }
 
 export class ClosePositionLimitDto {
   @ApiProperty({
-    description: 'Market index to close position for (e.g., 0 for SOL-PERP)',
-    example: 0,
+    description: 'Asset symbol (e.g., SOL, BTC, ETH) - case insensitive',
+    example: 'SOL',
   })
-  @IsInt()
-  @Min(0)
-  marketIndex: number;
+  @IsString()
+  @MinLength(1)
+  @MaxLength(10)
+  symbol: string;
 
   @ApiProperty({
-    description: 'Limit price to close at (in quote token units with 6 decimals)',
-    example: '150000000', // $150 with 6 decimals
+    description: 'Limit price in USD to close at (e.g., "150.50" for $150.50)',
+    example: '150.50',
   })
   @IsNumberString()
   price: string;

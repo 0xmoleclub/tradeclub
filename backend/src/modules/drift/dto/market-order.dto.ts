@@ -1,15 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsNumberString, IsInt, Min } from 'class-validator';
+import { IsEnum, IsString, IsNumberString, MinLength, MaxLength } from 'class-validator';
 import { PositionDirectionEnum } from '@/common/enums';
 
 export class MarketOrderDto {
   @ApiProperty({
-    description: 'Market index (e.g., 0 for SOL-PERP)',
-    example: 0,
+    description: 'Asset symbol (e.g., SOL, BTC, ETH, JUP) - case insensitive',
+    example: 'SOL',
   })
-  @IsInt()
-  @Min(0)
-  marketIndex: number;
+  @IsString()
+  @MinLength(1)
+  @MaxLength(10)
+  symbol: string;
 
   @ApiProperty({
     enum: PositionDirectionEnum,
@@ -20,9 +21,9 @@ export class MarketOrderDto {
   direction: PositionDirectionEnum;
 
   @ApiProperty({
-    description: 'Base asset amount (in base token units)',
-    example: '1000000000', // 1 SOL with 9 decimals
+    description: 'Amount in base asset units (e.g., "1.5" for 1.5 SOL)',
+    example: '1.5',
   })
   @IsNumberString()
-  baseAssetAmount: string;
+  amount: string;
 }

@@ -34,6 +34,23 @@ This guide explains how to integrate the TradeClub trading platform with your fr
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Available Markets
+
+| Symbol | Name | Base Decimals |
+|--------|------|---------------|
+| SOL | SOL-PERP | 9 |
+| BTC | BTC-PERP | 8 |
+| ETH | ETH-PERP | 8 |
+| JTO | JTO-PERP | 9 |
+| JUP | JUP-PERP | 6 |
+| WIF | WIF-PERP | 6 |
+| BONK | BONK-PERP | 5 |
+| HNT | HNT-PERP | 8 |
+| PYTH | PYTH-PERP | 6 |
+| W | W-PERP | 6 |
+| TNSR | TNSR-PERP | 9 |
+| DRIFT | DRIFT-PERP | 6 |
+
 ## API Endpoints
 
 ### 1. Authentication
@@ -61,7 +78,7 @@ GET  /api/v1/agent-wallets/gas-balance # Get SOL balance
 ```http
 GET  /api/v1/drift/account/delegation-tx       # Get unsigned delegate tx
 GET  /api/v1/drift/account/revoke-delegation-tx # Get unsigned revoke tx
-POST /api/v1/drift/account/initialize          # Get unsigned init tx
+GET  /api/v1/drift/account/initialize-tx       # Get unsigned init tx
 GET  /api/v1/drift/account/status              # Check status
 ```
 
@@ -135,110 +152,20 @@ async function authorizeAgent(wallet, connection) {
 }
 ```
 
-### Revoke Delegation
-
-```typescript
-async function revokeDelegation(wallet, connection) {
-  const token = localStorage.getItem('accessToken');
-  
-  // Get unsigned revoke transaction
-  const res = await fetch(`${API_URL}/drift/account/revoke-delegation-tx`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  const data = await res.json();
-  
-  // Sign and submit directly to Solana
-  const txBuffer = Buffer.from(data.transaction, 'base64');
-  const transaction = Transaction.from(txBuffer);
-  const signedTx = await wallet.signTransaction(transaction);
-  
-  const signature = await connection.sendRawTransaction(signedTx.serialize());
-  await connection.confirmTransaction(signature, 'confirmed');
-  
-  return signature;
-}
-```
-
-### Initialize Drift Account (New Users)
-
-```typescript
-async function initializeDriftAccount(wallet, connection) {
-  const token = localStorage.getItem('accessToken');
-  
-  // Get unsigned init transaction
-  const res = await fetch(`${API_URL}/drift/account/initialize`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
-  const data = await res.json();
-  
-  // Sign and submit directly to Solana
-  const txBuffer = Buffer.from(data.transaction, 'base64');
-  const transaction = Transaction.from(txBuffer);
-  const signedTx = await wallet.signTransaction(transaction);
-  
-  const signature = await connection.sendRawTransaction(signedTx.serialize());
-  await connection.confirmTransaction(signature, 'confirmed');
-  
-  return signature;
-}
-```
-
-## User Flows
-
-### New User (No Drift Account)
-1. Login (get JWT)
-2. Create agent wallet (`POST /agent-wallets`)
-3. User sends SOL to agent wallet address (for gas)
-4. Initialize Drift (user signs tx, submits to Solana)
-5. Delegate (user signs tx, submits to Solana)
-6. Deposit (user signs tx, submits to Solana)
-7. Trade!
-
-### Existing Drift User
-1. Login (get JWT)
-2. Create agent wallet (`POST /agent-wallets`)
-3. User sends SOL to agent wallet address (for gas)
-4. Delegate only (user signs tx, submits to Solana)
-5. Trade!
-
-## Key Points
-
-- **Delegation/revocation**: Frontend signs and submits directly to Solana, NOT to backend
-- **Backend only**: Returns unsigned transactions, handles trading after authorization
-- **Security**: User has full control, can revoke anytime
-- **Gas**: User must fund agent wallet with SOL for transaction fees
-
-## Network Configuration
-
-**Devnet (Testing):**
-```typescript
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
-```
-
-**Mainnet (Production):**
-```typescript
-const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
-```
-
-## Full Example Component
-
-See the complete React component in the full documentation or check the examples folder.
-
 ## Trading Examples
 
 ### Place Market Order
 
-Executes immediately at the best available price. If market order fails due to slippage (volatile market), automatically falls back to a limit order at market price + 0.5% buffer (rounded to market tick size).
+Executes immediately at the best available price. If market order fails due to slippage (volatile market), automatically falls back to a limit order at market price + 0.5% buffer.
 
 ```bash
 curl -X POST http://localhost:3002/api/v1/drift/order/place/market \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "marketIndex": 0,
+    "symbol": "SOL",
     "direction": "long",
-    "baseAssetAmount": "1000000000"
+    "amount": "1.5"
   }'
 ```
 
@@ -248,7 +175,9 @@ curl -X POST http://localhost:3002/api/v1/drift/order/place/market \
   "success": true,
   "signature": "5iV...",
   "orderType": "MARKET",
-  "fallback": false
+  "fallback": false,
+  "symbol": "SOL",
+  "amount": "1.5"
 }
 ```
 
@@ -258,7 +187,9 @@ curl -X POST http://localhost:3002/api/v1/drift/order/place/market \
   "success": true,
   "signature": "5iV...",
   "orderType": "MARKET_FALLBACK",
-  "fallback": true
+  "fallback": true,
+  "symbol": "SOL",
+  "amount": "1.5"
 }
 ```
 
@@ -271,10 +202,10 @@ curl -X POST http://localhost:3002/api/v1/drift/order/place/limit \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "marketIndex": 0,
+    "symbol": "SOL",
     "direction": "long",
-    "baseAssetAmount": "1000000000",
-    "price": "150000000"
+    "amount": "1.5",
+    "price": "150.50"
   }'
 ```
 
@@ -283,8 +214,54 @@ curl -X POST http://localhost:3002/api/v1/drift/order/place/limit \
 {
   "success": true,
   "signature": "5iV...",
-  "orderType": "LIMIT"
+  "orderType": "LIMIT",
+  "symbol": "SOL",
+  "amount": "1.5",
+  "price": "150.50"
 }
+```
+
+### Close Position at Market Price
+
+Close a specific position immediately at the current market price. Automatically determines the correct amount and direction. If market order fails due to slippage, falls back to limit order at market price + 0.5% buffer.
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/position/close/market \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "SOL"
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "signature": "5iV...",
+  "symbol": "SOL",
+  "type": "CLOSE_MARKET",
+  "fallback": false
+}
+```
+
+### Close Position at Limit Price
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/position/close/limit \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "SOL",
+    "price": "155.00"
+  }'
+```
+
+### Close All Positions
+
+```bash
+curl -X POST http://localhost:3002/api/v1/drift/positions/close-all \
+  -H "Authorization: Bearer <token>"
 ```
 
 ### Get Positions
@@ -312,8 +289,16 @@ curl -X POST http://localhost:3002/api/v1/drift/order/cancel \
 
 ## Amount Format
 
-- **baseAssetAmount**: In base token units with 9 decimals (e.g., `1000000000` = 1 SOL)
-- **price**: In quote token units with 6 decimals (e.g., `150000000` = $150 USDC)
+The API now accepts **human-readable amounts** instead of base units:
+
+| Asset | Example Amount | Base Units (internal) |
+|-------|----------------|----------------------|
+| SOL | `"1.5"` | `1500000000` (9 decimals) |
+| BTC | `"0.5"` | `50000000` (8 decimals) |
+| JUP | `"100"` | `100000000` (6 decimals) |
+| BONK | `"1000000"` | `100000000000` (5 decimals) |
+
+**Price format**: Always in USD (e.g., `"150.50"` for $150.50)
 
 ## Error Handling
 
@@ -321,87 +306,47 @@ Common errors when placing orders:
 
 | Error | Meaning | Solution |
 |-------|---------|----------|
+| `INVALID_SYMBOL` | Unknown asset symbol | Check available symbols list |
 | `NO_DRIFT_ACCOUNT` | User doesn't have a Drift account | Initialize first via `GET /drift/account/initialize-tx` |
 | `NO_AGENT_WALLET` | No agent wallet created | Create via `POST /agent-wallets` |
 | `NOT_DELEGATED` | Agent wallet not authorized | Delegate via `GET /drift/account/delegation-tx` |
 | `INSUFFICIENT_FUNDS` | Not enough USDC for order | Deposit via `POST /drift/deposit` |
 
+## User Flows
 
-### Close Position at Market Price
+### New User (No Drift Account)
+1. Login (get JWT)
+2. Create agent wallet (`POST /agent-wallets`)
+3. User sends SOL to agent wallet address (for gas)
+4. Initialize Drift (user signs tx, submits to Solana)
+5. Delegate (user signs tx, submits to Solana)
+6. Deposit (user signs tx, submits to Solana)
+7. Trade using symbols like `{"symbol": "SOL", "amount": "1.5"}`
 
-Close a specific position immediately at the current market price. Automatically determines the correct amount and direction. If market order fails due to slippage, falls back to limit order at market price + 0.5% buffer (rounded to market tick size).
+### Existing Drift User
+1. Login (get JWT)
+2. Create agent wallet (`POST /agent-wallets`)
+3. User sends SOL to agent wallet address (for gas)
+4. Delegate only (user signs tx, submits to Solana)
+5. Trade using symbols like `{"symbol": "SOL", "amount": "1.5"}`
 
-```bash
-curl -X POST http://localhost:3002/api/v1/drift/position/close/market \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "marketIndex": 0
-  }'
+## Key Points
+
+- **Delegation/revocation**: Frontend signs and submits directly to Solana, NOT to backend
+- **Backend only**: Returns unsigned transactions, handles trading after authorization
+- **Security**: User has full control, can revoke anytime
+- **Gas**: User must fund agent wallet with SOL for transaction fees
+- **Symbols**: Case-insensitive (SOL, sol, Sol all work)
+- **Amounts**: Human-readable (1.5 instead of 1500000000)
+
+## Network Configuration
+
+**Devnet (Testing):**
+```typescript
+const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "signature": "5iV...",
-  "closedAmount": "1000000000",
-  "marketIndex": 0,
-  "type": "CLOSE_MARKET",
-  "fallback": false
-}
+**Mainnet (Production):**
+```typescript
+const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
 ```
-
-### Close Position at Limit Price
-
-Close a specific position at a specified limit price.
-
-```bash
-curl -X POST http://localhost:3002/api/v1/drift/position/close/limit \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "marketIndex": 0,
-    "price": "155000000"
-  }'
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "signature": "5iV...",
-  "closedAmount": "1000000000",
-  "marketIndex": 0,
-  "limitPrice": "155000000",
-  "type": "CLOSE_LIMIT"
-}
-```
-
-### Close All Positions
-
-Close all open positions at market price. Useful for emergency exits.
-
-```bash
-curl -X POST http://localhost:3002/api/v1/drift/positions/close-all \
-  -H "Authorization: Bearer <token>"
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "signatures": ["5iV...", "3xR..."],
-  "closedPositions": [
-    { "marketIndex": 0, "amount": "1000000000" },
-    { "marketIndex": 1, "amount": "500000000" }
-  ],
-  "type": "CLOSE_ALL_MARKET"
-}
-```
-
-**Note:** Close position endpoints automatically:
-- Detect the position direction (long/short)
-- Calculate the exact position size
-- Use `reduceOnly: true` to prevent accidental position reversal
-
