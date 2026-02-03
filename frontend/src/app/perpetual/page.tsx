@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { MoreHorizontal, GripVertical, ChevronDown } from "lucide-react";
+import { MoreHorizontal, GripVertical } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LaserBackground } from "@/components/ui/effects/LaserBackground";
 import { CandleChart } from "@/components/perpetual/CandleChart";
+import { MarketHeader } from "@/components/perpetual/MarketHeader";
 import { OrderBook } from "@/components/perpetual/OrderBook";
 import { TradeHistory } from "@/components/perpetual/TradeHistory";
 import { PlaceOrder } from "@/components/perpetual/PlaceOrder";
@@ -87,12 +88,21 @@ export default function PerpetualPage() {
         <div className="flex-1 flex gap-1 overflow-hidden">
           {/* LEFT COLUMN (Chart + Orderbook + History) */}
           <div className="flex flex-col gap-1" style={{ width: `${100 - rightPanelWidth}%` }}>
-            {/* Top Row (Chart + Orderbook) */}
-            <div className="flex flex-1 gap-1" style={{ height: `${100 - bottomRowHeight}%` }}>
-              {/* Chart Panel */}
-              <GlassPanel style={{ width: `${chartWidth}%` }} className="rounded-tl-2xl">
-                <CandleChart symbol={selectedMarket} onSymbolChange={setSelectedMarket} />
-              </GlassPanel>
+            {/* Top Row (MarketHeader + Chart + Orderbook) */}
+            <div className="flex flex-1 gap-1 overflow-hidden" style={{ height: `${100 - bottomRowHeight}%` }}>
+              {/* Chart Section - Now with MarketHeader above */}
+              <div className="flex flex-col gap-1" style={{ width: `${chartWidth}%` }}>
+                {/* Market Header Component */}
+                <MarketHeader 
+                  selectedMarket={selectedMarket} 
+                  onMarketChange={setSelectedMarket} 
+                />
+                
+                {/* Chart Panel - Smaller now */}
+                <GlassPanel className="flex-1 rounded-tl-2xl min-h-0">
+                  <CandleChart symbol={selectedMarket} />
+                </GlassPanel>
+              </div>
 
               {/* Splitter Chart/OB */}
               <div className="w-1 bg-black hover:bg-magenta-500/50 cursor-col-resize flex items-center justify-center transition-colors" onMouseDown={handleMouseDown("chart")}>

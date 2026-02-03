@@ -1,37 +1,14 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
 
 interface CandleChartProps {
   symbol?: string;
-  onSymbolChange?: (symbol: string) => void;
 }
 
-interface MarketData {
-  marketIndex: number;
-  symbol: string;
-  baseAssetSymbol: string;
-  markPrice: string;
-  oraclePrice: string;
-  volume24h: string;
-  openInterest: string;
-  maxLeverage: number;
-}
-
-export const CandleChart = ({ symbol = "BTC-PERP", onSymbolChange }: CandleChartProps) => {
+export const CandleChart = ({ symbol = "BTC-PERP" }: CandleChartProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [markets, setMarkets] = useState<MarketData[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const currentMarket = markets.find(m => `${m.baseAssetSymbol}-PERP` === symbol);
-
-  useEffect(() => {
-    fetchMarkets();
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -40,46 +17,6 @@ export const CandleChart = ({ symbol = "BTC-PERP", onSymbolChange }: CandleChart
 
     return () => clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const fetchMarkets = async () => {
-    try {
-      const response = await fetch('/api/v1/drift/markets');
-      const data = await response.json();
-      console.log('[CandleChart] Fetched markets:', data);
-      setMarkets(data.data?.markets || data.markets || []);
-    } catch (error) {
-      console.error('[CandleChart] Failed to fetch markets:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatPrice = (price: string): string => {
-    const num = parseFloat(price);
-    if (isNaN(num)) return '$0';
-    return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
-  const formatNumber = (value: string | number): string => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    if (isNaN(num)) return '0';
-    
-    if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-    if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
-    if (num >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
-    return `$${num.toFixed(2)}`;
-  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -93,8 +30,9 @@ export const CandleChart = ({ symbol = "BTC-PERP", onSymbolChange }: CandleChart
     canvas.width = width;
     canvas.height = height;
 
-    // Mock Data Generator
-    let price = 50000;
+    // Mock Data Generator - seed based on symbol for consistency
+    const seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    let price = 50000 + (seed % 10000);
     const candles: { open: number; close: number; high: number; low: number }[] = [];
     for (let i = 0; i < 60; i++) {
       const open = price;
@@ -152,92 +90,10 @@ export const CandleChart = ({ symbol = "BTC-PERP", onSymbolChange }: CandleChart
       ctx.fillRect(x + 2, bodyTop, candleWidth - 4, h);
       ctx.shadowBlur = 0;
     });
-  }, []);
+  }, [symbol]);
 
   return (
     <div className="w-full h-full relative group cursor-crosshair flex flex-col">
-      {/* Market Selector Header - Top Left */}
-      <div className="absolute top-4 left-4 z-10">
-        {/* Market Dropdown */}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-2 bg-black/80 px-4 py-2 rounded-lg border border-white/20 hover:border-cyan-500/50 transition-all backdrop-blur-sm"
-          >
-            <span className="text-xl font-black font-['Rajdhani'] italic text-white">
-              {currentMarket?.baseAssetSymbol || symbol.split('-')[0]}
-              <span className="text-gray-500">-PERP</span>
-            </span>
-            <span className="text-lg font-mono text-cyan-400">
-              {currentMarket ? formatPrice(currentMarket.markPrice) : '$0'}
-            </span>
-            <ChevronDown 
-              size={16} 
-              className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-            />
-          </button>
-
-          {/* Dropdown Menu */}
-          {isOpen && (
-            <div className="absolute top-full left-0 mt-1 w-96 bg-[#0a0a0a] border border-white/20 rounded-lg shadow-2xl shadow-black/50 z-[9999] max-h-96 overflow-y-auto custom-scrollbar">
-              {loading ? (
-                <div className="px-4 py-8 flex items-center justify-center">
-                  <div className="w-4 h-4 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
-                </div>
-              ) : markets.length === 0 ? (
-                <div className="px-4 py-8 text-center text-gray-500 text-sm">
-                  No markets available
-                </div>
-              ) : (
-                markets.map((market) => {
-                const isSelected = `${market.baseAssetSymbol}-PERP` === symbol;
-                
-                return (
-                  <button
-                    key={market.marketIndex}
-                    onClick={() => {
-                      onSymbolChange?.(`${market.baseAssetSymbol}-PERP`);
-                      setIsOpen(false);
-                    }}
-                    className={`
-                      w-full px-4 py-3 flex items-center justify-between
-                      hover:bg-white/5 transition-colors border-b border-white/5
-                      ${isSelected ? 'bg-cyan-500/10' : ''}
-                    `}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`
-                        w-8 h-8 rounded-full flex items-center justify-center text-xs font-black
-                        ${isSelected ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-gray-400'}
-                      `}>
-                        {market.baseAssetSymbol.slice(0, 3)}
-                      </div>
-                      <div className="text-left">
-                        <div className="text-sm font-bold text-white">
-                          {market.baseAssetSymbol}
-                          <span className="text-gray-500 font-normal">-PERP</span>
-                        </div>
-                        <div className="text-[10px] text-gray-500">
-                          {market.maxLeverage}x • Vol: {formatNumber(market.volume24h)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-mono text-cyan-400">
-                        {formatPrice(market.markPrice || market.oraclePrice)}
-                      </div>
-                      <div className="text-[10px] text-gray-500">
-                        OI: {formatNumber(market.openInterest)}
-                      </div>
-                    </div>
-                  </button>
-                );
-              }))}
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Clock - Bottom Left */}
       <div className="absolute bottom-4 left-4 z-10 bg-black/80 px-4 py-2 rounded-lg border border-white/20 backdrop-blur-sm">
         <div className="flex items-center gap-2">
