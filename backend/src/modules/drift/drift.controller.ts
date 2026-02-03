@@ -25,8 +25,6 @@ import { PositionDirection, BN } from '@drift-labs/sdk';
 import { PublicKey } from '@solana/web3.js';
 
 @Controller('drift')
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class DriftController {
   constructor(
     private readonly driftService: DriftService,
@@ -35,6 +33,8 @@ export class DriftController {
 
   // ==================== Drift Account ====================
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('account')
   @ApiTags('Drift Account')
   @ApiOperation({
@@ -90,6 +90,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('account/status')
   @ApiTags('Drift Account')
   @ApiOperation({
@@ -101,6 +103,8 @@ export class DriftController {
     return status;
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('account/external-balance')
   @ApiTags('Drift Account')
   @ApiOperation({
@@ -112,6 +116,8 @@ export class DriftController {
     return balance;
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('account/delegation-tx')
   @ApiTags('Drift Account')
   @ApiOperation({
@@ -157,6 +163,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('account/revoke-delegation-tx')
   @ApiTags('Drift Account')
   @ApiOperation({
@@ -192,6 +200,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('account/initialize-tx')
   @ApiTags('Drift Account')
   @ApiOperation({
@@ -239,6 +249,8 @@ export class DriftController {
 
   // ==================== Drift Perp Trading ====================
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('positions')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -259,6 +271,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Get('orders')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -279,6 +293,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('order/place/market')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -323,6 +339,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('order/place/limit')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -369,6 +387,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('order/cancel')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -384,6 +404,8 @@ export class DriftController {
     return { success: true, signature: txSig };
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('orders/cancel-all')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -397,6 +419,8 @@ export class DriftController {
     return { success: true, signature: txSig };
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('order/take-profit')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -420,6 +444,8 @@ export class DriftController {
     return { success: true, signature: txSig, type: 'TAKE_PROFIT' };
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('order/stop-loss')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -445,6 +471,8 @@ export class DriftController {
 
   // ==================== Position Management ====================
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('position/close/market')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -480,6 +508,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('position/close/limit')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -522,6 +552,8 @@ export class DriftController {
     }
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('positions/close-all')
   @ApiTags('Drift Perp Trading')
   @ApiOperation({
@@ -548,6 +580,8 @@ export class DriftController {
 
   // ==================== Drift Account Fund ====================
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('deposit')
   @ApiTags('Drift Account Fund')
   @ApiOperation({
@@ -574,6 +608,8 @@ export class DriftController {
     };
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Post('withdraw')
   @ApiTags('Drift Account Fund')
   @ApiOperation({
@@ -600,7 +636,7 @@ export class DriftController {
     description: 'Returns all available perpetual markets',
   })
   async getMarkets() {
-    const markets = this.driftService.getMarkets();
+    const markets = await this.driftService.getMarkets();
     return { markets };
   }
 
@@ -608,16 +644,11 @@ export class DriftController {
   @ApiTags('Market Info')
   @ApiOperation({
     summary: 'Get market price',
-    description: 'Get current oracle price for a market',
+    description: 'Get current oracle price for a market (public endpoint)',
   })
   @ApiParam({ name: 'marketIndex', description: 'Market index' })
-  async getMarketPrice(
-    @CurrentUser() user: Payload,
-    @Param('marketIndex', ParseIntPipe) marketIndex: number,
-  ) {
-    const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
-    const price = await this.driftService.getMarketPrice(driftClient, marketIndex);
-    await driftClient.unsubscribe();
+  async getMarketPrice(@Param('marketIndex', ParseIntPipe) marketIndex: number) {
+    const price = await this.driftService.getMarketPrice(marketIndex);
     return { marketIndex, price };
   }
 

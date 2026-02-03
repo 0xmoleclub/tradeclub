@@ -1130,32 +1130,186 @@ export class DriftService implements OnModuleInit {
   /**
    * Get available markets
    */
-  getMarkets(): MarketInfo[] {
-    const perpMarkets = this.isDevnet ? DevnetPerpMarkets : MainnetPerpMarkets;
-    
-    return perpMarkets.map((market) => ({
-      marketIndex: market.marketIndex,
-      symbol: market.symbol,
-      baseAssetSymbol: market.baseAssetSymbol,
-      quoteAssetSymbol: 'USDC', // Perp markets are quoted in USDC
-      markPrice: '0', // Would need to fetch from oracle
-      oraclePrice: '0',
-      bidPrice: '0',
-      askPrice: '0',
-      volume24h: '0',
-      openInterest: '0',
-      maxLeverage: 5, // Default, actual value from market
-      initialMarginRatio: '0.2',
-      maintenanceMarginRatio: '0.1',
-    }));
+  /**
+   * Calculate mark price from AMM
+   */
+  private calculateAMMMarkPrice(amm: any): number {
+    try {
+      if (!amm) return 0;
+      
+      // Use SDK's calculation: quoteAssetReserve / baseAssetReserve * pegMultiplier / PRICE_PRECISION
+      const baseAssetReserve = amm.baseAssetReserve?.toNumber() || 0;
+      const quoteAssetReserve = amm.quoteAssetReserve?.toNumber() || 0;
+      const pegMultiplier = amm.pegMultiplier?.toNumber() || 0;
+      
+      if (baseAssetReserve === 0 || quoteAssetReserve === 0 || pegMultiplier === 0) {
+        return 0;
+      }
+      
+      // Drift's formula: (quote / base) * (peg / 1e6)
+      return (quoteAssetReserve / baseAssetReserve) * (pegMultiplier / 1e6);
+    } catch {
+      return 0;
+    }
   }
 
   /**
-   * Get market price from oracle
+   * Get markets with live data from Drift
    */
-  async getMarketPrice(driftClient: DriftClient, marketIndex: number): Promise<string> {
-    const oracleData = driftClient.getOracleDataForPerpMarket(marketIndex);
-    return oracleData.price.toString();
+  async getMarkets(): Promise<MarketInfo[]> {
+    const perpMarkets = this.isDevnet ? DevnetPerpMarkets : MainnetPerpMarkets;
+    const driftClient = await this.initializePublicClient();
+    
+    // Wait for markets to be loaded
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    try {
+      return perpMarkets.map((market) => {
+        try {
+          const perpMarketAccount = driftClient.getPerpMarketAccount(market.marketIndex);
+          
+          if (!perpMarketAccount) {
+            throw new Error(`Market ${market.marketIndex} not found`);
+          }
+          
+          // Get oracle price
+          let oraclePrice = 0;
+          try {
+            const oracleData = driftClient.getOracleDataForPerpMarket(market.marketIndex);
+            oraclePrice = oracleData?.price?.toNumber() || 0;
+            // Oracle price is in 1e6 precision
+            oraclePrice = oraclePrice / 1e6;
+          } catch {
+            // Oracle might be stale, continue with 0
+          }
+          
+          // Calculate mark price from AMM
+          const ammMarkPrice = this.calculateAMMMarkPrice(perpMarketAccount.amm);
+          
+          // Fallback: use lastMarkPriceTwap if AMM calculation fails
+          let markPrice = ammMarkPrice;
+          if (markPrice === 0) {
+            const lastMarkTwap = (perpMarketAccount as any).lastMarkPriceTwap?.toNumber();
+            if (lastMarkTwap) {
+              markPrice = lastMarkTwap / 1e6;
+            }
+          }
+          
+          // Final fallback to oracle price
+          if (markPrice === 0 && oraclePrice > 0) {
+            markPrice = oraclePrice;
+          }
+          
+          // Calculate bid/ask spread around mark price (0.05%)
+          const spreadPct = 0.0005;
+          const bidPrice = markPrice > 0 ? markPrice * (1 - spreadPct) : 0;
+          const askPrice = markPrice > 0 ? markPrice * (1 + spreadPct) : 0;
+          
+          // Get volume and open interest
+          const volume24h = (perpMarketAccount as any)?.volume24h?.toString() || '0';
+          const openInterest = (perpMarketAccount as any)?.openInterest?.toString() || 
+                               perpMarketAccount?.numberOfUsers?.toString() || '0';
+          
+          // Margin ratios from market (stored as 10000 = 100%)
+          const imrRaw = perpMarketAccount?.marginRatioInitial?.toString() || '2000';
+          const mmrRaw = perpMarketAccount?.marginRatioMaintenance?.toString() || '1000';
+          
+          const imrNum = parseInt(imrRaw) / 10000;
+          const maxLeverage = imrNum > 0 ? Math.round(1 / imrNum) : 5;
+          
+          return {
+            marketIndex: market.marketIndex,
+            symbol: market.symbol,
+            baseAssetSymbol: market.baseAssetSymbol,
+            quoteAssetSymbol: 'USDC',
+            markPrice: markPrice > 0 ? markPrice.toFixed(4) : '0',
+            oraclePrice: oraclePrice > 0 ? oraclePrice.toFixed(4) : '0',
+            bidPrice: bidPrice > 0 ? bidPrice.toFixed(4) : '0',
+            askPrice: askPrice > 0 ? askPrice.toFixed(4) : '0',
+            volume24h,
+            openInterest,
+            maxLeverage,
+            initialMarginRatio: imrNum.toString(),
+            maintenanceMarginRatio: (parseInt(mmrRaw) / 10000).toString(),
+          };
+        } catch (err) {
+          console.error(`Error fetching market ${market.marketIndex}:`, err.message);
+          // Return basic info if market data fetch fails
+          return {
+            marketIndex: market.marketIndex,
+            symbol: market.symbol,
+            baseAssetSymbol: market.baseAssetSymbol,
+            quoteAssetSymbol: 'USDC',
+            markPrice: '0',
+            oraclePrice: '0',
+            bidPrice: '0',
+            askPrice: '0',
+            volume24h: '0',
+            openInterest: '0',
+            maxLeverage: 5,
+            initialMarginRatio: '0.2',
+            maintenanceMarginRatio: '0.1',
+          };
+        }
+      });
+    } finally {
+      await driftClient.unsubscribe();
+    }
+  }
+
+  /**
+   * Initialize a read-only Drift client for public market data
+   */
+  async initializePublicClient(): Promise<DriftClient> {
+    const perpMarkets = this.isDevnet ? DevnetPerpMarkets : MainnetPerpMarkets;
+    
+    // Create a dummy wallet (not used for signing, just for reading)
+    const dummyKeypair = Keypair.generate();
+    const wallet = new Wallet(dummyKeypair);
+    
+    const driftClient = new DriftClient({
+      connection: this.connection,
+      wallet,
+      env: this.isDevnet ? 'devnet' : 'mainnet-beta',
+      perpMarketIndexes: perpMarkets.map(m => m.marketIndex),
+    });
+    
+    await driftClient.subscribe();
+    return driftClient;
+  }
+
+  /**
+   * Get market price from oracle (public, no auth required)
+   */
+  async getMarketPrice(marketIndex: number): Promise<string>;
+  async getMarketPrice(driftClient: DriftClient, marketIndex: number): Promise<string>;
+  async getMarketPrice(
+    driftClientOrIndex: DriftClient | number,
+    marketIndex?: number,
+  ): Promise<string> {
+    let client: DriftClient;
+    let index: number;
+    let shouldUnsubscribe = false;
+    
+    if (typeof driftClientOrIndex === 'number') {
+      // Public access - create temporary client
+      client = await this.initializePublicClient();
+      index = driftClientOrIndex;
+      shouldUnsubscribe = true;
+    } else {
+      // Authenticated access - use provided client
+      client = driftClientOrIndex;
+      index = marketIndex!;
+    }
+    
+    try {
+      const oracleData = client.getOracleDataForPerpMarket(index);
+      return oracleData.price.toString();
+    } finally {
+      if (shouldUnsubscribe) {
+        await client.unsubscribe();
+      }
+    }
   }
 
   /**
