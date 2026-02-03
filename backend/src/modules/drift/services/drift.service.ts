@@ -580,8 +580,8 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
-   * Place a market order
-   * Simple helper for market orders
+   * Place a market order with fallback to limit
+   * First tries market order, if it fails (slippage), falls back to limit at market price + buffer
    */
   async placeMarketOrder(
     driftClient: DriftClient,
@@ -590,22 +590,99 @@ export class DriftService implements OnModuleInit {
       direction: PositionDirection;
       baseAssetAmount: BN;
     },
-  ): Promise<string> {
-    const optionalParams = getMarketOrderParams({
-      marketIndex: params.marketIndex,
-      direction: params.direction,
-      baseAssetAmount: params.baseAssetAmount,
-      reduceOnly: false, // Always false for opening positions
-    });
+  ): Promise<{ signature: string; type: 'MARKET' | 'LIMIT_FALLBACK' }> {
+    // Try market order first
+    try {
+      const optionalParams = getMarketOrderParams({
+        marketIndex: params.marketIndex,
+        direction: params.direction,
+        baseAssetAmount: params.baseAssetAmount,
+        reduceOnly: false,
+      });
 
-    const orderParams = getOrderParams(optionalParams, {
-      marketType: MarketType.PERP,
-    });
+      const orderParams = getOrderParams(optionalParams, {
+        marketType: MarketType.PERP,
+      });
 
-    const txSig = await driftClient.placePerpOrder(orderParams);
-    this.logger.log(`Placed market order: ${txSig}`);
-    
-    return txSig;
+      const txSig = await driftClient.placePerpOrder(orderParams);
+      this.logger.log(`Placed market order: ${txSig}`);
+      return { signature: txSig, type: 'MARKET' };
+    } catch (marketError) {
+      this.logger.warn(`Market order failed, trying limit fallback: ${marketError.message}`);
+      
+      // Fallback: place limit order at market price with buffer
+      const limitPrice = await this.calculateLimitPriceWithBuffer(
+        driftClient,
+        params.marketIndex,
+        params.direction,
+      );
+
+      const optionalParams = getLimitOrderParams({
+        marketIndex: params.marketIndex,
+        direction: params.direction,
+        baseAssetAmount: params.baseAssetAmount,
+        price: limitPrice,
+        reduceOnly: false,
+        postOnly: false,
+      });
+
+      const orderParams = getOrderParams(optionalParams, {
+        marketType: MarketType.PERP,
+      });
+
+      const txSig = await driftClient.placePerpOrder(orderParams);
+      this.logger.log(`Placed limit fallback order: ${txSig}`);
+      return { signature: txSig, type: 'LIMIT_FALLBACK' };
+    }
+  }
+
+  /**
+   * Calculate limit price with buffer for market order fallback
+   * Uses 0.5% buffer and rounds to tick size for Drift compatibility
+   */
+  private async calculateLimitPriceWithBuffer(
+    driftClient: DriftClient,
+    marketIndex: number,
+    direction: PositionDirection,
+  ): Promise<BN> {
+    // Get market account for oracle price and tick size
+    const market = driftClient.getPerpMarketAccount(marketIndex);
+    if (!market) {
+      throw new Error(`Market ${marketIndex} not found`);
+    }
+
+    // Get tick size (minimum price increment)
+    const tickSize = market.amm.orderTickSize;
+
+    // Get oracle price (use lastOraclePrice from historical data)
+    const oraclePrice = market.amm.historicalOracleData?.lastOraclePrice || market.amm.lastMarkPriceTwap;
+
+    // Add 0.5% buffer for slippage protection (50 basis points)
+    // LONG/BUY: price = oracle * 1.005 (slightly higher to ensure fill)
+    // SHORT/SELL: price = oracle * 0.995 (slightly lower to ensure fill)
+    const isLong = direction === PositionDirection.LONG;
+    const bufferBps = 50; // 0.5% = 50 basis points
+    const priceMultiplier = isLong 
+      ? (10000 + bufferBps)  // 10050 = 1.005
+      : (10000 - bufferBps); // 9950 = 0.995
+
+    let limitPrice = oraclePrice.mul(new BN(priceMultiplier)).div(new BN(10000));
+
+    // Round to tick size (Drift requires prices to be multiples of tick size)
+    // For LONG: round UP to ensure order is aggressive enough
+    // For SHORT: round DOWN to ensure order is aggressive enough
+    if (!tickSize.isZero()) {
+      if (isLong) {
+        // Round UP: ((price / tickSize) + 1) * tickSize
+        limitPrice = limitPrice.div(tickSize).add(new BN(1)).mul(tickSize);
+      } else {
+        // Round DOWN: (price / tickSize) * tickSize
+        limitPrice = limitPrice.div(tickSize).mul(tickSize);
+      }
+    }
+
+    this.logger.log(`Market fallback limit price: ${limitPrice.toString()} (isLong: ${isLong}, tickSize: ${tickSize.toString()})`);
+    return limitPrice;
   }
 
   /**
@@ -641,13 +718,13 @@ export class DriftService implements OnModuleInit {
   }
 
   /**
-   * Close position at market price
-   * Automatically determines the correct direction and size based on current position
+   * Close position at market price with fallback to limit
+   * First tries market order, if it fails falls back to limit at market price + buffer
    */
   async closePositionMarket(
     driftClient: DriftClient,
     marketIndex: number,
-  ): Promise<{ signature: string; closedAmount: string }> {
+  ): Promise<{ signature: string; closedAmount: string; type: 'MARKET' | 'LIMIT_FALLBACK' }> {
     const user = driftClient.getUser();
     const position = user.getPerpPosition(marketIndex);
     
@@ -656,30 +733,63 @@ export class DriftService implements OnModuleInit {
     }
 
     // Determine direction opposite to current position
-    // Long position -> Sell (SHORT direction)
-    // Short position -> Buy (LONG direction)
     const isLong = position.baseAssetAmount.gt(new BN(0));
     const direction = isLong ? PositionDirection.SHORT : PositionDirection.LONG;
     const closeAmount = position.baseAssetAmount.abs();
 
-    const optionalParams = getMarketOrderParams({
-      marketIndex,
-      direction,
-      baseAssetAmount: closeAmount,
-      reduceOnly: true, // Important: prevents accidental position reversal
-    });
+    // Try market order first
+    try {
+      const optionalParams = getMarketOrderParams({
+        marketIndex,
+        direction,
+        baseAssetAmount: closeAmount,
+        reduceOnly: true,
+      });
 
-    const orderParams = getOrderParams(optionalParams, {
-      marketType: MarketType.PERP,
-    });
+      const orderParams = getOrderParams(optionalParams, {
+        marketType: MarketType.PERP,
+      });
 
-    const txSig = await driftClient.placePerpOrder(orderParams);
-    this.logger.log(`Closed position at market: ${txSig}`);
-    
-    return {
-      signature: txSig,
-      closedAmount: closeAmount.toString(),
-    };
+      const txSig = await driftClient.placePerpOrder(orderParams);
+      this.logger.log(`Closed position at market: ${txSig}`);
+      
+      return {
+        signature: txSig,
+        closedAmount: closeAmount.toString(),
+        type: 'MARKET',
+      };
+    } catch (marketError) {
+      this.logger.warn(`Market close failed, trying limit fallback: ${marketError.message}`);
+      
+      // Fallback: place limit order at market price with buffer
+      const limitPrice = await this.calculateLimitPriceWithBuffer(
+        driftClient,
+        marketIndex,
+        direction,
+      );
+
+      const optionalParams = getLimitOrderParams({
+        marketIndex,
+        direction,
+        baseAssetAmount: closeAmount,
+        price: limitPrice,
+        reduceOnly: true,
+        postOnly: false,
+      });
+
+      const orderParams = getOrderParams(optionalParams, {
+        marketType: MarketType.PERP,
+      });
+
+      const txSig = await driftClient.placePerpOrder(orderParams);
+      this.logger.log(`Closed position with limit fallback: ${txSig}`);
+      
+      return {
+        signature: txSig,
+        closedAmount: closeAmount.toString(),
+        type: 'LIMIT_FALLBACK',
+      };
+    }
   }
 
   /**

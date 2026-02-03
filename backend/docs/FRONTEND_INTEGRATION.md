@@ -229,7 +229,7 @@ See the complete React component in the full documentation or check the examples
 
 ### Place Market Order
 
-Executes immediately at the best available price.
+Executes immediately at the best available price. If market order fails due to slippage (volatile market), automatically falls back to a limit order at market price + 0.5% buffer (rounded to market tick size).
 
 ```bash
 curl -X POST http://localhost:3002/api/v1/drift/order/place/market \
@@ -242,12 +242,23 @@ curl -X POST http://localhost:3002/api/v1/drift/order/place/market \
   }'
 ```
 
-**Response:**
+**Response (Market):**
 ```json
 {
   "success": true,
   "signature": "5iV...",
-  "orderType": "MARKET"
+  "orderType": "MARKET",
+  "fallback": false
+}
+```
+
+**Response (Limit Fallback - volatile market):**
+```json
+{
+  "success": true,
+  "signature": "5iV...",
+  "orderType": "MARKET_FALLBACK",
+  "fallback": true
 }
 ```
 
@@ -318,7 +329,7 @@ Common errors when placing orders:
 
 ### Close Position at Market Price
 
-Close a specific position immediately at the current market price. Automatically determines the correct amount and direction.
+Close a specific position immediately at the current market price. Automatically determines the correct amount and direction. If market order fails due to slippage, falls back to limit order at market price + 0.5% buffer (rounded to market tick size).
 
 ```bash
 curl -X POST http://localhost:3002/api/v1/drift/position/close/market \
@@ -336,7 +347,8 @@ curl -X POST http://localhost:3002/api/v1/drift/position/close/market \
   "signature": "5iV...",
   "closedAmount": "1000000000",
   "marketIndex": 0,
-  "type": "CLOSE_MARKET"
+  "type": "CLOSE_MARKET",
+  "fallback": false
 }
 ```
 

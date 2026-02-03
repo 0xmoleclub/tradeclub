@@ -289,14 +289,19 @@ export class DriftController {
     try {
       const driftClient = await this.driftService.initializeForUser(user.id, user.walletAddress);
 
-      const txSig = await this.driftService.placeMarketOrder(driftClient, {
+      const result = await this.driftService.placeMarketOrder(driftClient, {
         marketIndex: dto.marketIndex,
         direction: dto.direction as PositionDirection,
         baseAssetAmount: new BN(dto.baseAssetAmount),
       });
 
       await driftClient.unsubscribe();
-      return { success: true, signature: txSig, orderType: 'MARKET' };
+      return { 
+        success: true, 
+        signature: result.signature, 
+        orderType: result.type === 'LIMIT_FALLBACK' ? 'MARKET_FALLBACK' : 'MARKET',
+        fallback: result.type === 'LIMIT_FALLBACK',
+      };
     } catch (error) {
       return this.handleOrderError(error);
     }
@@ -421,7 +426,8 @@ export class DriftController {
         signature: result.signature,
         closedAmount: result.closedAmount,
         marketIndex: dto.marketIndex,
-        type: 'CLOSE_MARKET',
+        type: result.type === 'LIMIT_FALLBACK' ? 'CLOSE_MARKET_FALLBACK' : 'CLOSE_MARKET',
+        fallback: result.type === 'LIMIT_FALLBACK',
       };
     } catch (error) {
       return this.handleOrderError(error);
