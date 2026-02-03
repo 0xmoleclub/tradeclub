@@ -24,12 +24,21 @@ export const CandleChart = ({ symbol = "BTC-PERP", onSymbolChange }: CandleChart
   const [markets, setMarkets] = useState<MarketData[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const currentMarket = markets.find(m => `${m.baseAssetSymbol}-PERP` === symbol);
 
   useEffect(() => {
     fetchMarkets();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -147,8 +156,8 @@ export const CandleChart = ({ symbol = "BTC-PERP", onSymbolChange }: CandleChart
 
   return (
     <div className="w-full h-full relative group cursor-crosshair flex flex-col">
-      {/* Market Selector Header */}
-      <div className="absolute top-4 left-4 z-10 flex items-center gap-4">
+      {/* Market Selector Header - Top Left */}
+      <div className="absolute top-4 left-4 z-10">
         {/* Market Dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
@@ -227,15 +236,28 @@ export const CandleChart = ({ symbol = "BTC-PERP", onSymbolChange }: CandleChart
             </div>
           )}
         </div>
+      </div>
 
-        {/* Timeframe Buttons */}
-        <div className="flex gap-1">
-          {["15m", "1h", "4h", "1D"].map((tf) => (
-            <button key={tf} className="px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:text-white hover:bg-white/10 rounded transition-colors bg-black/40">
-              {tf}
-            </button>
-          ))}
+      {/* Clock - Bottom Left */}
+      <div className="absolute bottom-4 left-4 z-10 bg-black/80 px-4 py-2 rounded-lg border border-white/20 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-sm font-mono text-gray-300">
+            {currentTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+          <span className="text-xs text-gray-500">
+            {Intl.DateTimeFormat().resolvedOptions().timeZone}
+          </span>
         </div>
+      </div>
+
+      {/* Timeframe Buttons - Bottom Right */}
+      <div className="absolute bottom-4 right-4 z-10 flex gap-1">
+        {["15m", "1h", "4h", "1D"].map((tf) => (
+          <button key={tf} className="px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:text-white hover:bg-white/10 rounded transition-colors bg-black/80 border border-white/20 backdrop-blur-sm">
+            {tf}
+          </button>
+        ))}
       </div>
 
       <canvas ref={canvasRef} className="w-full h-full" />
