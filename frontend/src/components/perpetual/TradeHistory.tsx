@@ -1,6 +1,12 @@
+'use client';
+
 import React from "react";
 
-export const TradeHistory = () => {
+interface TradeHistoryProps {
+  symbol?: string;
+}
+
+export const TradeHistory = ({ symbol = "BTC-PERP" }: TradeHistoryProps) => {
   const trades = Array.from({ length: 20 }, (_, i) => ({
     price: 98420 + (Math.random() - 0.5) * 50,
     size: Math.random() * 0.5,

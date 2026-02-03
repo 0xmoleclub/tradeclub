@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { MoreHorizontal, GripVertical } from "lucide-react";
+import { MoreHorizontal, GripVertical, ChevronDown } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { LaserBackground } from "@/components/ui/effects/LaserBackground";
 import { CandleChart } from "@/components/perpetual/CandleChart";
@@ -11,6 +11,9 @@ import { PlaceOrder } from "@/components/perpetual/PlaceOrder";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 export default function PerpetualPage() {
+  // --- Market Selection ---
+  const [selectedMarket, setSelectedMarket] = useState<string>("BTC-PERP");
+
   // --- Resizable Grid Logic ---
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +91,7 @@ export default function PerpetualPage() {
             <div className="flex flex-1 gap-1" style={{ height: `${100 - bottomRowHeight}%` }}>
               {/* Chart Panel */}
               <GlassPanel style={{ width: `${chartWidth}%` }} className="rounded-tl-2xl">
-                <CandleChart />
+                <CandleChart symbol={selectedMarket} onSymbolChange={setSelectedMarket} />
               </GlassPanel>
 
               {/* Splitter Chart/OB */}
@@ -104,7 +107,7 @@ export default function PerpetualPage() {
                     <MoreHorizontal size={14} className="text-gray-600" />
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <OrderBook />
+                    <OrderBook symbol={selectedMarket} />
                   </div>
                 </div>
               </GlassPanel>
@@ -117,7 +120,7 @@ export default function PerpetualPage() {
 
             {/* Bottom Row (History) */}
             <GlassPanel className="rounded-bl-2xl" style={{ height: `${bottomRowHeight}%` }}>
-              <TradeHistory />
+              <TradeHistory symbol={selectedMarket} />
             </GlassPanel>
           </div>
 
@@ -128,7 +131,7 @@ export default function PerpetualPage() {
 
           {/* RIGHT COLUMN (Place Order) */}
           <GlassPanel className="rounded-r-2xl" style={{ width: `${rightPanelWidth}%` }}>
-            <PlaceOrder />
+            <PlaceOrder symbol={selectedMarket} />
           </GlassPanel>
         </div>
       </div>

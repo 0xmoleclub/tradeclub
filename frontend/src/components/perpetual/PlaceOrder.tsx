@@ -1,6 +1,10 @@
 import React from "react";
 
-export const PlaceOrder = () => (
+interface PlaceOrderProps {
+  symbol?: string;
+}
+
+export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => (
   <div className="h-full p-6 flex flex-col bg-[#080808] relative overflow-hidden">
     {/* Background Texture */}
     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20" />

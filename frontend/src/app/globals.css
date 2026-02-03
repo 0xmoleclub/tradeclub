@@ -89,14 +89,36 @@ body::before {
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: var(--color-void); 
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-steel); 
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neon);
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-steel) var(--color-void);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--color-void);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-steel);
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--color-neon);
 }
 
