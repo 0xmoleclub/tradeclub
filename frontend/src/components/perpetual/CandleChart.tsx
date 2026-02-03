@@ -1,127 +1,166 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from "react";
+import { useHyperliquidCandles } from "@/hooks/useHyperliquidCandles";
 
 interface CandleChartProps {
   symbol?: string;
 }
 
+const INTERVALS = [
+  { label: "1m", value: "1m" },
+  { label: "5m", value: "5m" },
+  { label: "15m", value: "15m" },
+  { label: "1h", value: "1h" },
+  { label: "4h", value: "4h" },
+  { label: "1d", value: "1d" },
+];
+
 export const CandleChart = ({ symbol = "BTC-PERP" }: CandleChartProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [interval, setInterval] = useState("15m");
+  const { candles } = useHyperliquidCandles(symbol, interval);
+  const [mounted, setMounted] = useState(false);
+  
+  // Chart refs
+  const chartRef = useRef<any>(null);
+  const seriesRef = useRef<any>(null);
 
+  // Prevent SSR issues
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
+    setMounted(true);
   }, []);
 
+  // Initialize chart once
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!chartContainerRef.current || !mounted) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    let isActive = true;
 
-    const width = canvas.offsetWidth;
-    const height = canvas.offsetHeight;
-    canvas.width = width;
-    canvas.height = height;
+    import("lightweight-charts").then((lc) => {
+      if (!isActive || !chartContainerRef.current) return;
 
-    // Mock Data Generator - seed based on symbol for consistency
-    const seed = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    let price = 50000 + (seed % 10000);
-    const candles: { open: number; close: number; high: number; low: number }[] = [];
-    for (let i = 0; i < 60; i++) {
-      const open = price;
-      const close = price + (Math.random() - 0.5) * 500;
-      const high = Math.max(open, close) + Math.random() * 100;
-      const low = Math.min(open, close) - Math.random() * 100;
-      candles.push({ open, close, high, low });
-      price = close;
-    }
+      const chart = lc.createChart(chartContainerRef.current, {
+        layout: {
+          background: { color: "transparent" },
+          textColor: "#9ca3af",
+          fontFamily: "Rajdhani, monospace",
+        },
+        grid: {
+          vertLines: { color: "rgba(255, 255, 255, 0.05)" },
+          horzLines: { color: "rgba(255, 255, 255, 0.05)" },
+        },
+        crosshair: {
+          mode: 1,
+          vertLine: {
+            color: "rgba(255, 255, 255, 0.3)",
+            labelBackgroundColor: "rgba(0, 0, 0, 0.8)",
+          },
+          horzLine: {
+            color: "rgba(255, 255, 255, 0.3)",
+            labelBackgroundColor: "rgba(0, 0, 0, 0.8)",
+          },
+        },
+        rightPriceScale: {
+          borderColor: "rgba(255, 255, 255, 0.1)",
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        },
+        timeScale: {
+          borderColor: "rgba(255, 255, 255, 0.1)",
+          timeVisible: true,
+          secondsVisible: false,
+        },
+      });
 
-    const candleWidth = width / 60;
-    const maxPrice = Math.max(...candles.map((c) => c.high));
-    const minPrice = Math.min(...candles.map((c) => c.low));
-    const priceRange = maxPrice - minPrice;
+      const series = chart.addSeries(lc.CandlestickSeries, {
+        upColor: "#06b6d4",
+        downColor: "#d946ef",
+        borderUpColor: "#06b6d4",
+        borderDownColor: "#d946ef",
+        wickUpColor: "#06b6d4",
+        wickDownColor: "#d946ef",
+      });
 
-    // Draw
-    ctx.clearRect(0, 0, width, height);
+      chartRef.current = chart;
+      seriesRef.current = series;
 
-    // Grid
-    ctx.strokeStyle = "rgba(255,255,255,0.05)";
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 5; i++) {
-      const y = (height / 5) * i;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
+      // Resize handler
+      const handleResize = () => {
+        if (chartContainerRef.current && chartRef.current) {
+          const { width, height } = chartContainerRef.current.getBoundingClientRect();
+          chartRef.current.applyOptions({ width, height });
+        }
+      };
 
-    candles.forEach((c, i) => {
-      const x = i * candleWidth;
-      const isUp = c.close > c.open;
-      const color = isUp ? "#06b6d4" : "#d946ef"; // Cyan / Magenta
-      const bodyTop = height - ((Math.max(c.open, c.close) - minPrice) / priceRange) * height * 0.8 - height * 0.1;
-      const bodyBottom = height - ((Math.min(c.open, c.close) - minPrice) / priceRange) * height * 0.8 - height * 0.1;
-      const wickTop = height - ((c.high - minPrice) / priceRange) * height * 0.8 - height * 0.1;
-      const wickBottom = height - ((c.low - minPrice) / priceRange) * height * 0.8 - height * 0.1;
+      window.addEventListener('resize', handleResize);
+      handleResize();
 
-      ctx.fillStyle = color;
-      ctx.strokeStyle = color;
-
-      // Wick
-      ctx.beginPath();
-      ctx.moveTo(x + candleWidth / 2, wickTop);
-      ctx.lineTo(x + candleWidth / 2, wickBottom);
-      ctx.stroke();
-
-      // Body
-      const h = Math.max(1, bodyBottom - bodyTop);
-      ctx.fillRect(x + 2, bodyTop, candleWidth - 4, h);
-
-      // Glow
-      ctx.shadowBlur = 10;
-      ctx.shadowColor = color;
-      ctx.fillRect(x + 2, bodyTop, candleWidth - 4, h);
-      ctx.shadowBlur = 0;
+      return () => {
+        window.removeEventListener('resize', handleResize);
+      };
     });
-  }, [symbol]);
+
+    return () => {
+      isActive = false;
+      if (chartRef.current) {
+        chartRef.current.remove();
+        chartRef.current = null;
+        seriesRef.current = null;
+      }
+    };
+  }, [mounted]);
+
+  // Update data when candles change
+  useEffect(() => {
+    if (!seriesRef.current || candles.length === 0) return;
+
+    console.log('[Chart] Setting', candles.length, 'candles');
+
+    const data = candles.map(c => ({
+      time: c.time,
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+    }));
+
+    seriesRef.current.setData(data);
+    
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent();
+    }
+  }, [candles]);
+
+  if (!mounted) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full h-full relative group cursor-crosshair flex flex-col">
-      {/* Clock - Bottom Left */}
-      <div className="absolute bottom-4 left-4 z-10 bg-black/80 px-4 py-2 rounded-lg border border-white/20 backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-sm font-mono text-gray-300">
-            {currentTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </span>
-          <span className="text-xs text-gray-500">
-            {Intl.DateTimeFormat().resolvedOptions().timeZone}
-          </span>
-        </div>
-      </div>
+    <div className="w-full h-full relative">
+      {/* Chart Container */}
+      <div ref={chartContainerRef} className="w-full h-full" />
 
-      {/* Timeframe Buttons - Bottom Right */}
-      <div className="absolute bottom-4 right-4 z-10 flex gap-1">
-        {["15m", "1h", "4h", "1D"].map((tf) => (
-          <button key={tf} className="px-3 py-1.5 text-[10px] font-bold text-gray-500 hover:text-white hover:bg-white/10 rounded transition-colors bg-black/80 border border-white/20 backdrop-blur-sm">
-            {tf}
+      {/* Interval Buttons - Bottom Right */}
+      <div className="absolute bottom-3 right-3 z-10 flex gap-0.5 bg-black/80 p-1 rounded-lg border border-white/20 backdrop-blur-sm">
+        {INTERVALS.map((tf) => (
+          <button
+            key={tf.value}
+            onClick={() => setInterval(tf.value)}
+            className={`
+              px-2 py-1 text-[10px] font-bold rounded transition-colors
+              ${interval === tf.value 
+                ? 'bg-cyan-500/30 text-cyan-400' 
+                : 'text-gray-500 hover:text-white hover:bg-white/10'
+              }
+            `}
+          >
+            {tf.label}
           </button>
         ))}
-      </div>
-
-      <canvas ref={canvasRef} className="w-full h-full" />
-      
-      {/* Crosshair Lines */}
-      <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="absolute top-1/2 left-0 w-full h-[1px] bg-white/20 border-t border-dashed border-white/30" />
-        <div className="absolute top-0 left-1/2 h-full w-[1px] bg-white/20 border-l border-dashed border-white/30" />
       </div>
     </div>
   );
