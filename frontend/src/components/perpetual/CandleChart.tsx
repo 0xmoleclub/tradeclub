@@ -92,11 +92,21 @@ export const CandleChart = ({ symbol = "BTC-PERP" }: CandleChartProps) => {
         }
       };
 
+      // Use ResizeObserver to handle container size changes (including splitter drag)
+      const resizeObserver = new ResizeObserver(() => {
+        handleResize();
+      });
+
+      if (chartContainerRef.current) {
+        resizeObserver.observe(chartContainerRef.current);
+      }
+
       window.addEventListener('resize', handleResize);
       handleResize();
 
       return () => {
         window.removeEventListener('resize', handleResize);
+        resizeObserver.disconnect();
       };
     });
 

@@ -50,7 +50,7 @@ export default function PerpetualPage() {
       } else if (isDragging.current === "chart") {
         const leftColWidth = rect.width * (1 - rightPanelWidth / 100);
         const newChartW = ((e.clientX - rect.left) / leftColWidth) * 100;
-        setChartWidth(Math.max(40, Math.min(80, newChartW)));
+        setChartWidth(Math.max(55, Math.min(80, newChartW)));
       }
     },
     [rightPanelWidth],
@@ -89,9 +89,9 @@ export default function PerpetualPage() {
           {/* LEFT COLUMN (Chart + Orderbook + History) */}
           <div className="flex flex-col gap-1" style={{ width: `${100 - rightPanelWidth}%` }}>
             {/* Top Row (MarketHeader + Chart + Orderbook) */}
-            <div className="flex flex-1 gap-1 overflow-hidden" style={{ height: `${100 - bottomRowHeight}%` }}>
+            <div className="flex flex-1 gap-1 overflow-hidden min-w-0" style={{ height: `${100 - bottomRowHeight}%` }}>
               {/* Chart Section - Now with MarketHeader above */}
-              <div className="flex flex-col gap-1" style={{ width: `${chartWidth}%` }}>
+              <div className="flex flex-col gap-1 flex-shrink-0 overflow-hidden" style={{ width: `${chartWidth}%` }}>
                 {/* Market Header Component */}
                 <MarketHeader 
                   selectedMarket={selectedMarket} 
@@ -110,7 +110,7 @@ export default function PerpetualPage() {
               </div>
 
               {/* Orderbook Panel */}
-              <GlassPanel className="flex-1">
+              <GlassPanel className="flex-shrink" style={{ width: `${100 - chartWidth}%` }}>
                 <div className="h-full flex flex-col">
                   <div className="px-3 py-2 border-b border-white/10 flex justify-between items-center bg-white/5">
                     <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Orderbook</span>
