@@ -79,17 +79,6 @@ export class UsersService {
   async findAll(): Promise<User[]> {
     return this.prisma.user.findMany({
       include: {
-        // DEPRECATED: Drift agent wallet
-        driftAgentWallet: {
-          select: {
-            id: true,
-            publicKey: true,
-            isDelegated: true,
-            subaccountIndex: true,
-            status: true,
-            delegatedAt: true,
-          },
-        },
         // Hypercore wallet
         hypercoreWallet: {
           select: {
@@ -105,16 +94,6 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
-        driftAgentWallet: {
-          select: {
-            id: true,
-            publicKey: true,
-            isDelegated: true,
-            subaccountIndex: true,
-            status: true,
-            delegatedAt: true,
-          },
-        },
         hypercoreWallet: {
           select: {
             agentAddress: true,
