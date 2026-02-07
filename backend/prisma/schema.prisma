@@ -32,28 +32,29 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // DEPRECATED: Solana
+  // DEPRECATED: Solana wallet address - keeping for backward compatibility
   walletAddress String?    @unique
   
-  // EVM wallet address
+  // EVM wallet address (primary for Hypercore)
   evmAddress    String?    @unique
   
   nonce         String?
   lastLoginAt   DateTime?
 
+  // Profile
   name   String?
   avatar String?
   role   UserRole   @default(USER)
   status UserStatus @default(ACTIVE)
 
-  // DEPRECATED: Drift
+  // DEPRECATED: Drift/Solana agent wallet
   driftAgentWallet DriftAgentWallet? @relation("DriftAgentWallet")
   
-  // Hyperliquid agent wallet - ONE per user
-  hyperliquidWallet HyperliquidWallet? @relation("HyperliquidWallet")
+  // Hypercore agent wallet - ONE per user
+  hypercoreWallet HypercoreWallet? @relation("HypercoreWallet")
 }
 
-// DEPRECATED: Solana/Drift
+// DEPRECATED: Solana/Drift agent wallet
 model DriftAgentWallet {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -80,13 +81,13 @@ model DriftAgentWallet {
 }
 
 // MINIMAL: Just store the agent key
-model HyperliquidWallet {
+model HypercoreWallet {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, name: "HyperliquidWallet")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, name: "HypercoreWallet")
 
   // Agent address (used as identifier on Hyperliquid)
   agentAddress        String @unique

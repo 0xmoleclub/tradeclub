@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import { HyperliquidWallet } from '@prisma/client';
+import { HypercoreWallet } from '@prisma/client';
 import { EvmCryptoService } from './evm-crypto.service';
 
 /**
- * Hyperliquid Agent Wallet Service - ULTRA SIMPLE
+ * Hypercore Agent Wallet Service - ULTRA SIMPLE
  * 
  * ONE endpoint: Create/Replace wallet
  * - If no wallet exists: creates new one
@@ -16,8 +16,8 @@ import { EvmCryptoService } from './evm-crypto.service';
  * - Revoking/rotating (just call this endpoint again!)
  */
 @Injectable()
-export class HyperliquidWalletsService {
-  private readonly logger = new Logger(HyperliquidWalletsService.name);
+export class HypercoreWalletsService {
+  private readonly logger = new Logger(HypercoreWalletsService.name);
 
   constructor(
     private prisma: PrismaService,
@@ -41,7 +41,7 @@ export class HyperliquidWalletsService {
     const encryptedAgentKey = this.evmCryptoService.encryptPrivateKey(keypair.privateKey);
 
     // Upsert: Create if not exists, replace if exists
-    await this.prisma.hyperliquidWallet.upsert({
+    await this.prisma.hypercoreWallet.upsert({
       where: { userId },
       update: {
         // Replace old wallet
@@ -66,8 +66,8 @@ export class HyperliquidWalletsService {
   /**
    * Get user's agent wallet (for API response - no sensitive data)
    */
-  async getWallet(userId: string): Promise<Pick<HyperliquidWallet, 'agentAddress' | 'masterAddress' | 'createdAt'> | null> {
-    return this.prisma.hyperliquidWallet.findUnique({
+  async getWallet(userId: string): Promise<Pick<HypercoreWallet, 'agentAddress' | 'masterAddress' | 'createdAt'> | null> {
+    return this.prisma.hypercoreWallet.findUnique({
       where: { userId },
       select: {
         agentAddress: true,
@@ -81,7 +81,7 @@ export class HyperliquidWalletsService {
    * Get agent private key for signing (used by trading service)
    */
   async getAgentPrivateKey(userId: string): Promise<`0x${string}`> {
-    const wallet = await this.prisma.hyperliquidWallet.findUnique({
+    const wallet = await this.prisma.hypercoreWallet.findUnique({
       where: { userId },
     });
 
@@ -96,7 +96,7 @@ export class HyperliquidWalletsService {
    * Get master address for a user
    */
   async getMasterAddress(userId: string): Promise<string> {
-    const wallet = await this.prisma.hyperliquidWallet.findUnique({
+    const wallet = await this.prisma.hypercoreWallet.findUnique({
       where: { userId },
       select: { masterAddress: true },
     });

@@ -2,7 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as hl from '@nktkas/hyperliquid';
 import { privateKeyToAccount } from 'viem/accounts';
-import { HyperliquidWalletsService } from '../../hyperliquid-wallets/services/hyperliquid-wallets.service';
+import { HypercoreWalletsService } from '../../hypercore-wallets/services/hypercore-wallets.service';
 import {
   CancelOrderDto,
   OpenLimitOrderDto,
@@ -18,14 +18,14 @@ import {
 } from '../dto';
 
 @Injectable()
-export class HyperliquidService {
-  private readonly logger = new Logger(HyperliquidService.name);
+export class HypercoreService {
+  private readonly logger = new Logger(HypercoreService.name);
   private readonly infoClient: hl.InfoClient;
   private readonly isTestnet: boolean;
 
   constructor(
     private configService: ConfigService,
-    private walletsService: HyperliquidWalletsService,
+    private walletsService: HypercoreWalletsService,
   ) {
     this.isTestnet = this.configService.get<string>('HYPERLIQUID_NETWORK', 'testnet') === 'testnet';
     const transport = new hl.HttpTransport({ isTestnet: this.isTestnet });

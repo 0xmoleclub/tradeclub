@@ -7,7 +7,7 @@ import {
   Param,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { HyperliquidService } from './services/hyperliquid.service';
+import { HypercoreService } from './services/hypercore.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Payload } from '../auth/auth.interface';
@@ -25,25 +25,25 @@ import {
   UpdateLeverageDto,
 } from './dto';
 
-@ApiTags('Hyperliquid Trading')
-@Controller('hyperliquid')
+@ApiTags('Hypercore Trading')
+@Controller('hypercore')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-export class HyperliquidController {
-  constructor(private readonly hyperliquidService: HyperliquidService) {}
+export class HypercoreController {
+  constructor(private readonly hypercoreService: HypercoreService) {}
 
   // ==================== MARKET DATA ====================
 
   @Get('markets')
   @ApiOperation({ summary: 'Get available perpetual markets' })
   async getMarkets() {
-    return this.hyperliquidService.getMarkets();
+    return this.hypercoreService.getMarkets();
   }
 
   @Get('markets/:coin/price')
   @ApiOperation({ summary: 'Get current price for a coin' })
   async getPrice(@Param('coin') coin: string) {
-    return this.hyperliquidService.getPrice(coin);
+    return this.hypercoreService.getPrice(coin);
   }
 
   // ==================== ACCOUNT ====================
@@ -51,25 +51,25 @@ export class HyperliquidController {
   @Get('account')
   @ApiOperation({ summary: 'Get my account summary' })
   async getAccount(@CurrentUser() user: Payload) {
-    return this.hyperliquidService.getAccountSummary(user.id);
+    return this.hypercoreService.getAccountSummary(user.id);
   }
 
   @Get('positions')
   @ApiOperation({ summary: 'Get all my positions' })
   async getPositions(@CurrentUser() user: Payload) {
-    return this.hyperliquidService.getPositions(user.id);
+    return this.hypercoreService.getPositions(user.id);
   }
 
   @Get('positions/:coin')
   @ApiOperation({ summary: 'Get position for specific coin' })
   async getPositionForCoin(@CurrentUser() user: Payload, @Param('coin') coin: string) {
-    return this.hyperliquidService.getPositionForCoin(user.id, coin);
+    return this.hypercoreService.getPositionForCoin(user.id, coin);
   }
 
   @Get('orders/open')
   @ApiOperation({ summary: 'Get my open orders' })
   async getOpenOrders(@CurrentUser() user: Payload) {
-    return this.hyperliquidService.getOpenOrders(user.id);
+    return this.hypercoreService.getOpenOrders(user.id);
   }
 
   // ==================== OPEN POSITION ORDERS ====================
@@ -80,7 +80,7 @@ export class HyperliquidController {
     description: 'Places a limit order to open a new position or increase existing position',
   })
   async openLimitOrder(@CurrentUser() user: Payload, @Body() dto: OpenLimitOrderDto) {
-    return this.hyperliquidService.openLimitOrder(user.id, dto);
+    return this.hypercoreService.openLimitOrder(user.id, dto);
   }
 
   @Post('orders/market/open')
@@ -89,7 +89,7 @@ export class HyperliquidController {
     description: 'Executes a market order to open a new position or increase existing position',
   })
   async openMarketOrder(@CurrentUser() user: Payload, @Body() dto: OpenMarketOrderDto) {
-    return this.hyperliquidService.openMarketOrder(user.id, dto);
+    return this.hypercoreService.openMarketOrder(user.id, dto);
   }
 
   // ==================== CLOSE POSITION ORDERS ====================
@@ -100,7 +100,7 @@ export class HyperliquidController {
     description: 'Places a limit order to close/reduce existing position. Auto-detects position direction.',
   })
   async closeLimitOrder(@CurrentUser() user: Payload, @Body() dto: CloseLimitOrderDto) {
-    return this.hyperliquidService.closeLimitOrder(user.id, dto);
+    return this.hypercoreService.closeLimitOrder(user.id, dto);
   }
 
   @Post('orders/market/close')
@@ -109,7 +109,7 @@ export class HyperliquidController {
     description: 'Executes a market order to close/reduce existing position. Auto-detects position direction.',
   })
   async closeMarketOrder(@CurrentUser() user: Payload, @Body() dto: CloseMarketOrderDto) {
-    return this.hyperliquidService.closeMarketOrder(user.id, dto);
+    return this.hypercoreService.closeMarketOrder(user.id, dto);
   }
 
   // ==================== TP/SL ORDERS ====================
@@ -120,7 +120,7 @@ export class HyperliquidController {
     description: 'Places a TP trigger order. Cancels existing TP orders for the same coin.',
   })
   async placeTakeProfit(@CurrentUser() user: Payload, @Body() dto: TakeProfitOrderDto) {
-    return this.hyperliquidService.placeTakeProfitOrder(user.id, dto);
+    return this.hypercoreService.placeTakeProfitOrder(user.id, dto);
   }
 
   @Post('orders/stop-loss')
@@ -129,7 +129,7 @@ export class HyperliquidController {
     description: 'Places a SL trigger order. Cancels existing SL orders for the same coin.',
   })
   async placeStopLoss(@CurrentUser() user: Payload, @Body() dto: StopLossOrderDto) {
-    return this.hyperliquidService.placeStopLossOrder(user.id, dto);
+    return this.hypercoreService.placeStopLossOrder(user.id, dto);
   }
 
   // ==================== CANCEL ORDERS ====================
@@ -137,13 +137,13 @@ export class HyperliquidController {
   @Post('orders/cancel')
   @ApiOperation({ summary: 'Cancel specific order by ID' })
   async cancelOrder(@CurrentUser() user: Payload, @Body() dto: CancelOrderDto) {
-    return this.hyperliquidService.cancelOrder(user.id, dto);
+    return this.hypercoreService.cancelOrder(user.id, dto);
   }
 
   @Post('orders/cancel-all')
   @ApiOperation({ summary: 'Cancel all open orders' })
   async cancelAllOrders(@CurrentUser() user: Payload) {
-    return this.hyperliquidService.cancelAllOrders(user.id);
+    return this.hypercoreService.cancelAllOrders(user.id);
   }
 
   // ==================== CLOSE ALL POSITIONS ====================
@@ -154,7 +154,7 @@ export class HyperliquidController {
     description: 'Closes all open positions using market or limit at mid price',
   })
   async closeAllPositions(@CurrentUser() user: Payload, @Body() dto: CloseAllPositionsDto) {
-    return this.hyperliquidService.closeAllPositions(user.id, dto.closeType);
+    return this.hypercoreService.closeAllPositions(user.id, dto.closeType);
   }
 
   // ==================== LEVERAGE & MARGIN ====================
@@ -165,7 +165,7 @@ export class HyperliquidController {
     description: 'Updates leverage for a specific trading pair (isolated margin)',
   })
   async updateLeverage(@CurrentUser() user: Payload, @Body() dto: UpdateLeverageDto) {
-    return this.hyperliquidService.updateLeverage(user.id, dto);
+    return this.hypercoreService.updateLeverage(user.id, dto);
   }
 
   @Post('margin/isolated')
@@ -174,7 +174,7 @@ export class HyperliquidController {
     description: 'Switches asset to isolated margin mode with max leverage',
   })
   async setIsolatedMode(@CurrentUser() user: Payload, @Body() dto: SetIsolatedModeDto) {
-    return this.hyperliquidService.setIsolatedMode(user.id, dto);
+    return this.hypercoreService.setIsolatedMode(user.id, dto);
   }
 
   // ==================== TWAP ====================
@@ -185,6 +185,6 @@ export class HyperliquidController {
     description: 'Creates a TWAP execution plan (simplified - returns plan only)',
   })
   async twap(@CurrentUser() user: Payload, @Body() dto: TwapDto) {
-    return this.hyperliquidService.twap(user.id, dto);
+    return this.hypercoreService.twap(user.id, dto);
   }
 }

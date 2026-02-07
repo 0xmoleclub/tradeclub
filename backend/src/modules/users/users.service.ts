@@ -90,8 +90,8 @@ export class UsersService {
             delegatedAt: true,
           },
         },
-        // Hyperliquid wallet
-        hyperliquidWallet: {
+        // Hypercore wallet
+        hypercoreWallet: {
           select: {
             agentAddress: true,
             masterAddress: true,
@@ -115,7 +115,7 @@ export class UsersService {
             delegatedAt: true,
           },
         },
-        hyperliquidWallet: {
+        hypercoreWallet: {
           select: {
             agentAddress: true,
             masterAddress: true,

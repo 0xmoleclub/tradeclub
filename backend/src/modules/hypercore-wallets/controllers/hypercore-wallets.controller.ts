@@ -1,17 +1,17 @@
 import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { isAddress } from 'viem';
-import { HyperliquidWalletsService } from '../services/hyperliquid-wallets.service';
+import { HypercoreWalletsService } from '../services/hypercore-wallets.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Payload } from '../../auth/auth.interface';
 
-@ApiTags('Hyperliquid Wallets')
-@Controller('hyperliquid-wallets')
+@ApiTags('Hypercore Wallets')
+@Controller('hypercore-wallets')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-export class HyperliquidWalletsController {
-  constructor(private readonly walletsService: HyperliquidWalletsService) {}
+export class HypercoreWalletsController {
+  constructor(private readonly walletsService: HypercoreWalletsService) {}
 
   @Post()
   @ApiOperation({
@@ -70,7 +70,7 @@ with same name "trade-club-agent" automatically revokes the old one.
     if (!wallet) {
       return {
         hasWallet: false,
-        message: 'No agent wallet. Call POST /hyperliquid-wallets to create one.',
+        message: 'No agent wallet. Call POST /hypercore-wallets to create one.',
       };
     }
 

@@ -9,11 +9,11 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
 
-// NEW: EVM/Hyperliquid modules
-import { HyperliquidWalletsModule } from './modules/hyperliquid-wallets/hyperliquid-wallets.module';
-import { HyperliquidModule } from './modules/hyperliquid/hyperliquid.module';
+// NEW: EVM/Hypercore modules
+import { HypercoreWalletsModule } from './modules/hypercore-wallets/hypercore-wallets.module';
+import { HypercoreModule } from './modules/hypercore/hypercore.module';
 
-// DEPRECATED: Solana/Drift modules - commented out for EVM/Hyperliquid migration
+// DEPRECATED: Solana/Drift modules - commented out for EVM/Hypercore migration
 // import { AgentWalletsModule } from './modules/drift-agent-wallets/drift-agent-wallets.module';
 // import { DriftModule } from './modules/drift/drift.module';
 
@@ -47,11 +47,11 @@ import { HyperliquidModule } from './modules/hyperliquid/hyperliquid.module';
     UsersModule,
     HealthModule,
     
-    // NEW: EVM/Hyperliquid modules
-    HyperliquidWalletsModule,
-    HyperliquidModule,
+    // NEW: EVM/Hypercore modules
+    HypercoreWalletsModule,
+    HypercoreModule,
     
-    // DEPRECATED: Solana/Drift modules - migrating to EVM/Hyperliquid
+    // DEPRECATED: Solana/Drift modules - migrating to EVM/Hypercore
     // DriftAgentWalletsModule,
     // DriftModule,
   ],
