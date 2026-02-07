@@ -14,7 +14,7 @@ const NAV_MENU = [
   {
     label: "ARENA",
     items: [
-      { label: "BATTLE", desc: "PvP Trading", icon: Sword },
+      { label: "BATTLE", desc: "PvP Trading", icon: Sword, href: "/create-match" },
       { label: "WATCH & PREDICT", desc: "Spectate & Win", icon: Eye, href: "/watch-and-predict" },
     ],
   },
