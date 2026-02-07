@@ -5,25 +5,32 @@ import {
   Body,
   UseGuards,
   Param,
-  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { HyperliquidService } from './services/hyperliquid.service';
-import { HyperliquidWalletsService } from '../hyperliquid-wallets/services/hyperliquid-wallets.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Payload } from '../auth/auth.interface';
-import { PlaceOrderDto, CancelOrderDto, UpdateLeverageDto } from './dto';
+import {
+  CancelOrderDto,
+  OpenLimitOrderDto,
+  OpenMarketOrderDto,
+  CloseLimitOrderDto,
+  CloseMarketOrderDto,
+  TakeProfitOrderDto,
+  StopLossOrderDto,
+  TwapDto,
+  CloseAllPositionsDto,
+  SetIsolatedModeDto,
+  UpdateLeverageDto,
+} from './dto';
 
 @ApiTags('Hyperliquid Trading')
 @Controller('hyperliquid')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class HyperliquidController {
-  constructor(
-    private readonly hyperliquidService: HyperliquidService,
-    private readonly walletsService: HyperliquidWalletsService,
-  ) {}
+  constructor(private readonly hyperliquidService: HyperliquidService) {}
 
   // ==================== MARKET DATA ====================
 
@@ -44,100 +51,140 @@ export class HyperliquidController {
   @Get('account')
   @ApiOperation({ summary: 'Get my account summary' })
   async getAccount(@CurrentUser() user: Payload) {
-    try {
-      const summary = await this.hyperliquidService.getAccountSummary(user.id);
-      return { success: true, account: summary };
-    } catch (error) {
-      return { 
-        success: false, 
-        message: 'Failed to fetch account. Make sure you have a wallet and it is approved on Hyperliquid.',
-        error: error.message,
-      };
-    }
+    return this.hyperliquidService.getAccountSummary(user.id);
   }
 
   @Get('positions')
-  @ApiOperation({ summary: 'Get my open positions' })
+  @ApiOperation({ summary: 'Get all my positions' })
   async getPositions(@CurrentUser() user: Payload) {
-    try {
-      const positions = await this.hyperliquidService.getPositions(user.id);
-      return { success: true, positions };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
+    return this.hyperliquidService.getPositions(user.id);
   }
 
-  @Get('orders')
+  @Get('positions/:coin')
+  @ApiOperation({ summary: 'Get position for specific coin' })
+  async getPositionForCoin(@CurrentUser() user: Payload, @Param('coin') coin: string) {
+    return this.hyperliquidService.getPositionForCoin(user.id, coin);
+  }
+
+  @Get('orders/open')
   @ApiOperation({ summary: 'Get my open orders' })
   async getOpenOrders(@CurrentUser() user: Payload) {
-    try {
-      const orders = await this.hyperliquidService.getOpenOrders(user.id);
-      return { success: true, orders };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
+    return this.hyperliquidService.getOpenOrders(user.id);
   }
 
-  // ==================== TRADING ====================
+  // ==================== OPEN POSITION ORDERS ====================
 
-  @Post('orders')
-  @ApiOperation({ summary: 'Place an order' })
-  async placeOrder(@CurrentUser() user: Payload, @Body() dto: PlaceOrderDto) {
-    try {
-      const result = await this.hyperliquidService.placeOrder(user.id, {
-        coin: dto.coin,
-        side: dto.side,
-        size: dto.size,
-        price: dto.price,
-        orderType: dto.orderType,
-        timeInForce: dto.timeInForce,
-        reduceOnly: dto.reduceOnly,
-        triggerPrice: dto.triggerPrice,
-      });
-      return { success: true, result };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
+  @Post('orders/limit/open')
+  @ApiOperation({
+    summary: 'Open limit order',
+    description: 'Places a limit order to open a new position or increase existing position',
+  })
+  async openLimitOrder(@CurrentUser() user: Payload, @Body() dto: OpenLimitOrderDto) {
+    return this.hyperliquidService.openLimitOrder(user.id, dto);
   }
+
+  @Post('orders/market/open')
+  @ApiOperation({
+    summary: 'Open market order',
+    description: 'Executes a market order to open a new position or increase existing position',
+  })
+  async openMarketOrder(@CurrentUser() user: Payload, @Body() dto: OpenMarketOrderDto) {
+    return this.hyperliquidService.openMarketOrder(user.id, dto);
+  }
+
+  // ==================== CLOSE POSITION ORDERS ====================
+
+  @Post('orders/limit/close')
+  @ApiOperation({
+    summary: 'Close limit order',
+    description: 'Places a limit order to close/reduce existing position. Auto-detects position direction.',
+  })
+  async closeLimitOrder(@CurrentUser() user: Payload, @Body() dto: CloseLimitOrderDto) {
+    return this.hyperliquidService.closeLimitOrder(user.id, dto);
+  }
+
+  @Post('orders/market/close')
+  @ApiOperation({
+    summary: 'Close market order',
+    description: 'Executes a market order to close/reduce existing position. Auto-detects position direction.',
+  })
+  async closeMarketOrder(@CurrentUser() user: Payload, @Body() dto: CloseMarketOrderDto) {
+    return this.hyperliquidService.closeMarketOrder(user.id, dto);
+  }
+
+  // ==================== TP/SL ORDERS ====================
+
+  @Post('orders/take-profit')
+  @ApiOperation({
+    summary: 'Place Take Profit order',
+    description: 'Places a TP trigger order. Cancels existing TP orders for the same coin.',
+  })
+  async placeTakeProfit(@CurrentUser() user: Payload, @Body() dto: TakeProfitOrderDto) {
+    return this.hyperliquidService.placeTakeProfitOrder(user.id, dto);
+  }
+
+  @Post('orders/stop-loss')
+  @ApiOperation({
+    summary: 'Place Stop Loss order',
+    description: 'Places a SL trigger order. Cancels existing SL orders for the same coin.',
+  })
+  async placeStopLoss(@CurrentUser() user: Payload, @Body() dto: StopLossOrderDto) {
+    return this.hyperliquidService.placeStopLossOrder(user.id, dto);
+  }
+
+  // ==================== CANCEL ORDERS ====================
 
   @Post('orders/cancel')
-  @ApiOperation({ summary: 'Cancel an order' })
+  @ApiOperation({ summary: 'Cancel specific order by ID' })
   async cancelOrder(@CurrentUser() user: Payload, @Body() dto: CancelOrderDto) {
-    try {
-      const result = await this.hyperliquidService.cancelOrder(user.id, dto.coin, dto.orderId);
-      return { success: true, result };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
+    return this.hyperliquidService.cancelOrder(user.id, dto);
   }
 
   @Post('orders/cancel-all')
-  @ApiOperation({ summary: 'Cancel all orders' })
-  @ApiQuery({ name: 'coin', required: false })
-  async cancelAllOrders(@CurrentUser() user: Payload, @Query('coin') coin?: string) {
-    try {
-      const result = await this.hyperliquidService.cancelAllOrders(user.id, coin);
-      return { success: true, result };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
+  @ApiOperation({ summary: 'Cancel all open orders' })
+  async cancelAllOrders(@CurrentUser() user: Payload) {
+    return this.hyperliquidService.cancelAllOrders(user.id);
   }
 
-  // ==================== LEVERAGE ====================
+  // ==================== CLOSE ALL POSITIONS ====================
+
+  @Post('positions/close-all')
+  @ApiOperation({
+    summary: 'Close all positions',
+    description: 'Closes all open positions using market or limit at mid price',
+  })
+  async closeAllPositions(@CurrentUser() user: Payload, @Body() dto: CloseAllPositionsDto) {
+    return this.hyperliquidService.closeAllPositions(user.id, dto.closeType);
+  }
+
+  // ==================== LEVERAGE & MARGIN ====================
 
   @Post('leverage')
-  @ApiOperation({ summary: 'Update leverage' })
+  @ApiOperation({
+    summary: 'Update leverage',
+    description: 'Updates leverage for a specific trading pair (isolated margin)',
+  })
   async updateLeverage(@CurrentUser() user: Payload, @Body() dto: UpdateLeverageDto) {
-    try {
-      const result = await this.hyperliquidService.updateLeverage(
-        user.id,
-        dto.coin,
-        dto.leverage,
-        dto.isCross,
-      );
-      return { success: true, result };
-    } catch (error) {
-      return { success: false, message: error.message };
-    }
+    return this.hyperliquidService.updateLeverage(user.id, dto);
+  }
+
+  @Post('margin/isolated')
+  @ApiOperation({
+    summary: 'Switch to isolated margin',
+    description: 'Switches asset to isolated margin mode with max leverage',
+  })
+  async setIsolatedMode(@CurrentUser() user: Payload, @Body() dto: SetIsolatedModeDto) {
+    return this.hyperliquidService.setIsolatedMode(user.id, dto);
+  }
+
+  // ==================== TWAP ====================
+
+  @Post('orders/twap')
+  @ApiOperation({
+    summary: 'Create TWAP plan',
+    description: 'Creates a TWAP execution plan (simplified - returns plan only)',
+  })
+  async twap(@CurrentUser() user: Payload, @Body() dto: TwapDto) {
+    return this.hyperliquidService.twap(user.id, dto);
   }
 }

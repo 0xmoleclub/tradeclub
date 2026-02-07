@@ -1,3 +1,16 @@
-export { PlaceOrderDto } from './place-order.dto';
-export { CancelOrderDto } from './cancel-order.dto';
+export {
+  TimeInForce,
+  CloseAllType,
+  CancelOrderDto,
+  OpenLimitOrderDto,
+  OpenMarketOrderDto,
+  CloseLimitOrderDto,
+  CloseMarketOrderDto,
+  TakeProfitOrderDto,
+  StopLossOrderDto,
+  TwapDto,
+  CloseAllPositionsDto,
+  SetIsolatedModeDto,
+} from './order.dto';
+
 export { UpdateLeverageDto } from './update-leverage.dto';
