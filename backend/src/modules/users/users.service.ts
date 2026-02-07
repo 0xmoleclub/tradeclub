@@ -90,16 +90,11 @@ export class UsersService {
             delegatedAt: true,
           },
         },
-        // NEW: Hyperliquid wallet
+        // Hyperliquid wallet
         hyperliquidWallet: {
           select: {
-            id: true,
             agentAddress: true,
             masterAddress: true,
-            isApproved: true,
-            subaccountIndex: true,
-            status: true,
-            approvedAt: true,
           },
         },
       },
@@ -122,13 +117,8 @@ export class UsersService {
         },
         hyperliquidWallet: {
           select: {
-            id: true,
             agentAddress: true,
             masterAddress: true,
-            isApproved: true,
-            subaccountIndex: true,
-            status: true,
-            approvedAt: true,
           },
         },
       },
