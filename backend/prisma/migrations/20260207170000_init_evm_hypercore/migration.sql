@@ -1,6 +1,6 @@
--- Migration: Complete database reset for EVM/Hypercore architecture
--- WARNING: This drops ALL data and recreates schema from scratch
--- Created at: 2026-02-07T13:25:00Z
+-- Migration: Initial EVM/Hypercore Schema
+-- Complete database reset with clean EVM-only architecture
+-- Created at: 2026-02-07T17:00:00Z
 
 -- ============================================
 -- DROP EVERYTHING (Clean Slate)
@@ -30,16 +30,13 @@ DROP TYPE IF EXISTS "AgentWalletStatus" CASCADE;
 CREATE TYPE "UserRole" AS ENUM ('USER', 'ADMIN', 'MODERATOR');
 CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING');
 
--- User Table (EVM-first, Solana deprecated/optional)
+-- User Table (EVM only)
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    -- DEPRECATED: Solana wallet (keeping for backward compat, but nullable)
-    "walletAddress" TEXT,
-    
-    -- PRIMARY: EVM wallet address
+    -- EVM wallet address
     "evmAddress" TEXT,
     
     "nonce" TEXT,
@@ -55,9 +52,7 @@ CREATE TABLE "User" (
 );
 
 -- User indexes
-CREATE UNIQUE INDEX "User_walletAddress_key" ON "User"("walletAddress");
 CREATE UNIQUE INDEX "User_evmAddress_key" ON "User"("evmAddress");
-CREATE INDEX "User_evmAddress_idx" ON "User"("evmAddress");
 
 -- Hypercore Wallet Table (EVM Agent for Hyperliquid)
 CREATE TABLE "HypercoreWallet" (
@@ -70,7 +65,7 @@ CREATE TABLE "HypercoreWallet" (
     -- Agent wallet details
     "agentAddress" TEXT NOT NULL,        -- The agent's public address (used on Hyperliquid)
     "encryptedAgentKey" TEXT NOT NULL,   -- Encrypted private key for signing
-    "masterAddress" TEXT NOT NULL,       -- User's master wallet that approved this agent
+    "masterAddress" TEXT,                -- Optional: user's master wallet reference
     
     "encryptionVersion" TEXT NOT NULL DEFAULT 'v1',
 

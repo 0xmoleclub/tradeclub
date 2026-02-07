@@ -1,21 +1,21 @@
 # TradeClub Backend API
 
-A NestJS backend API for TradeClub with Solana wallet authentication and Drift Protocol integration.
+A NestJS backend API for TradeClub with EVM wallet authentication and Hyperliquid trading.
 
 ## Features
 
-- **Wallet Authentication**: Signature-based auth using Solana
+- **EVM Wallet Authentication**: EIP-191 signature verification
   - Nonce-based signature verification
   - JWT token issuance after signature validation
   - Automatic user creation on first login
-- **Agent Wallet**: Platform-managed wallet for Drift Protocol delegation
-  - User creates agent wallet via API
-  - User delegates trading authority on Drift Protocol
-  - Funds stay in user's wallet - agent only has trading authority
-- **Drift Protocol Integration**: Full perp trading
-  - Deposit/withdraw collateral
-  - Place/cancel orders (market, limit)
-  - View positions and account info
+- **Agent Wallet**: Platform-managed EVM wallet for Hyperliquid trading
+  - Backend generates EVM keypair per user
+  - Encrypts private key with AES-256-GCM
+  - User approves agent on Hyperliquid via `ApproveAgent` transaction
+- **Hyperliquid Integration**: Full perpetual trading
+  - Market/limit orders (open/close positions)
+  - Take Profit / Stop Loss orders
+  - Position and account management
   - Real-time market data
 - **Prisma ORM**: PostgreSQL with type-safe queries
 - **API Documentation**: Swagger/OpenAPI
@@ -24,15 +24,15 @@ A NestJS backend API for TradeClub with Solana wallet authentication and Drift P
 ## Architecture
 
 ```
-User Wallet (funds here)
+User EVM Wallet (funds here)
     ↓
-  Delegates trading authority to
+  Approves agent on Hyperliquid
     ↓
-Agent Wallet (platform-managed)
+Agent Wallet (platform-managed, trades on behalf)
     ↓
   Trades on
     ↓
-Drift Protocol
+Hyperliquid
 ```
 
 ## Database Schema (Prisma)
@@ -41,20 +41,19 @@ Drift Protocol
 | Field | Description |
 |-------|-------------|
 | `id` | UUID |
-| `walletAddress` | User's Solana wallet (unique) |
+| `evmAddress` | User's EVM wallet address (unique) |
 | `nonce` | Auth nonce |
 | `role`, `status` | User management |
-| `agentWallet` | Optional 1:1 relation |
+| `hypercoreWallet` | Optional 1:1 relation to agent wallet |
 
-### AgentWallet
+### HypercoreWallet
 | Field | Description |
 |-------|-------------|
 | `id` | UUID |
 | `userId` | FK to user |
-| `publicKey` | Solana public key |
-| `encryptedSecretKey` | AES-256-GCM encrypted (64 bytes) |
-| `isDelegated` | Delegated on Drift? |
-| `subaccountIndex` | Drift subaccount |
+| `agentAddress` | EVM address used as agent on Hyperliquid |
+| `encryptedAgentKey` | AES-256-GCM encrypted private key |
+| `encryptionVersion` | Encryption scheme version |
 
 ## Installation
 
@@ -82,8 +81,8 @@ cp .env.example .env
 | `PORT` | Application port | `3002` |
 | `JWT_SECRET` | JWT secret key | - |
 | `WALLET_ENCRYPTION_KEY` | AES-256 encryption key | - |
-| `SOLANA_RPC_URL` | Solana RPC endpoint | `https://api.devnet.solana.com` |
-| `SOLANA_NETWORK` | Network (devnet/mainnet) | `devnet` |
+| `HYPERLIQUID_NETWORK` | testnet or mainnet | `testnet` |
+| `HYPERLIQUID_RPC_URL` | Hyperliquid RPC endpoint | `https://api.hyperliquid-testnet.xyz` |
 
 ## Running the Application
 
@@ -103,41 +102,41 @@ Swagger docs available at: `http://localhost:3002/docs`
 ### Authentication
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/auth/nonce?walletAddress=...` | Get nonce for signing |
+| GET | `/api/v1/auth/nonce?walletAddress=0x...` | Get nonce for signing |
 | POST | `/api/v1/auth/login` | Login with signature |
-| GET | `/api/v1/auth/check` | Validate JWT token (auth required) |
-| GET | `/api/v1/auth/me` | Get current user profile (auth required) |
+| GET | `/api/v1/auth/check` | Validate JWT token |
+| GET | `/api/v1/auth/me` | Get current user profile |
 
 ### Agent Wallet
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/agent-wallets` | Create agent wallet (auth required) |
-| GET | `/api/v1/agent-wallets/me` | Get my agent wallet |
-| PATCH | `/api/v1/agent-wallets/:id/delegate` | Mark as delegated |
-| PATCH | `/api/v1/agent-wallets/:id/revoke` | Revoke delegation |
+| POST | `/api/v1/hypercore/agent` | Create/replace agent wallet |
+| GET | `/api/v1/hypercore/agent` | Get my agent wallet |
 
-### Drift Trading
+### Hypercore Trading
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/drift/account` | Get account info (collateral, margin, leverage) |
-| POST | `/api/v1/drift/account/initialize` | Initialize Drift account |
-| GET | `/api/v1/drift/positions` | Get open positions |
-| GET | `/api/v1/drift/positions/:marketIndex` | Get position by market |
-| GET | `/api/v1/drift/orders` | Get open orders |
-| POST | `/api/v1/drift/orders` | Place order (market/limit/trigger) |
-| POST | `/api/v1/drift/orders/take-profit` | Place take profit order |
-| POST | `/api/v1/drift/orders/stop-loss` | Place stop loss order |
-| POST | `/api/v1/drift/orders/cancel` | Cancel order |
-| POST | `/api/v1/drift/orders/cancel-all` | Cancel all orders |
-| POST | `/api/v1/drift/deposit` | Deposit collateral (USDC) |
-| POST | `/api/v1/drift/withdraw` | Withdraw collateral |
-| GET | `/api/v1/drift/markets` | Get available markets |
-| GET | `/api/v1/drift/markets/:marketIndex/price` | Get market price |
+| GET | `/api/v1/hypercore/account` | Get account summary |
+| GET | `/api/v1/hypercore/positions` | Get open positions |
+| GET | `/api/v1/hypercore/positions/:coin` | Get position for coin |
+| GET | `/api/v1/hypercore/orders/open` | Get open orders |
+| POST | `/api/v1/hypercore/orders/market/open` | Open position with market order |
+| POST | `/api/v1/hypercore/orders/limit/open` | Open position with limit order |
+| POST | `/api/v1/hypercore/orders/market/close` | Close position with market order |
+| POST | `/api/v1/hypercore/orders/limit/close` | Close position with limit order |
+| POST | `/api/v1/hypercore/orders/take-profit` | Place take profit order |
+| POST | `/api/v1/hypercore/orders/stop-loss` | Place stop loss order |
+| POST | `/api/v1/hypercore/orders/cancel` | Cancel specific order |
+| POST | `/api/v1/hypercore/orders/cancel-all` | Cancel all orders |
+| POST | `/api/v1/hypercore/positions/close-all` | Close all positions |
+| POST | `/api/v1/hypercore/leverage` | Update leverage |
+| GET | `/api/v1/hypercore/markets` | Get available markets |
+| GET | `/api/v1/hypercore/markets/:coin/price` | Get market price |
 
 ### Users
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/users` | Get all users (Admin/Moderator) |
+| GET | `/api/v1/users` | Get all users |
 | GET | `/api/v1/users/:id` | Get user by ID |
 | PATCH | `/api/v1/users/:id` | Update user |
 
@@ -145,102 +144,90 @@ Swagger docs available at: `http://localhost:3002/docs`
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/v1/health` | Health check |
-| GET | `/api/v1/health/liveness` | Kubernetes liveness probe |
+| GET | `/api/v1/health/liveness` | Liveness probe |
 
 ## Login Flow
 
 ```typescript
 // 1. Get nonce
 const { nonce, message } = await fetch(
-  '/api/v1/auth/nonce?walletAddress=' + publicKey.toBase58()
+  '/api/v1/auth/nonce?walletAddress=' + evmAddress
 ).then(r => r.json());
 
-// 2. Sign message with wallet (e.g., Phantom)
-const encoded = new TextEncoder().encode(message);
-const signed = await window.solana.signMessage(encoded);
-const signature = bs58.encode(signed.signature);
+// 2. Sign message with EVM wallet (e.g., MetaMask)
+const signature = await ethereum.request({
+  method: 'personal_sign',
+  params: [message, evmAddress]
+});
 
 // 3. Login
 const { accessToken, user } = await fetch('/api/v1/auth/login', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ walletAddress: publicKey.toBase58(), signature })
+  body: JSON.stringify({ walletAddress: evmAddress, signature })
 }).then(r => r.json());
 ```
 
 ## Agent Wallet Flow
 
-1. User logs in with wallet auth
-2. User creates agent wallet: `POST /api/v1/agent-wallets`
-3. Backend generates Solana keypair, encrypts secret key
-4. User delegates on Drift Protocol UI (using agent wallet public key)
-5. User calls `PATCH /api/v1/agent-wallets/:id/delegate` to mark as delegated
-6. Agent wallet can now trade on behalf of user
+1. User logs in with EVM wallet
+2. Backend creates agent wallet: `POST /api/v1/hypercore/agent` (zero input)
+3. Backend returns `agentAddress`
+4. User calls Hyperliquid's `ApproveAgent` with the `agentAddress`
+5. Agent wallet can now trade on behalf of user
 
-## Drift Trading Flow
+## Trading Flow
 
 ```typescript
-// 1. Initialize Drift account (one-time)
-await fetch('/api/v1/drift/account/initialize', {
+// 1. Create agent wallet (if not exists)
+const { agentAddress } = await fetch('/api/v1/hypercore/agent', {
   method: 'POST',
   headers: { 'Authorization': `Bearer ${accessToken}` }
-});
+}).then(r => r.json());
 
-// 2. Deposit USDC collateral
-await fetch('/api/v1/drift/deposit', {
+// 2. Open a market order (BUY 10 SUI)
+await fetch('/api/v1/hypercore/orders/market/open', {
   method: 'POST',
   headers: { 
     'Authorization': `Bearer ${accessToken}`,
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    marketIndex: 0, // USDC
-    amount: '1000000000' // 1000 USDC (6 decimals)
+    coin: 'SUI',
+    isBuy: true,
+    size: '10'
   })
 });
 
-// 3. Place a market order
-await fetch('/api/v1/drift/orders', {
+// 3. Place Stop Loss
+await fetch('/api/v1/hypercore/orders/stop-loss', {
   method: 'POST',
   headers: { 
     'Authorization': `Bearer ${accessToken}`,
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    marketIndex: 0, // SOL-PERP
-    direction: 'LONG',
-    baseAssetAmount: '1000000000', // 1 SOL
-    orderType: 'MARKET'
+    coin: 'SUI',
+    isBuy: true,  // Same as position direction
+    size: '10',
+    stopLossPrice: '3.50',
+    stopLossTrigger: '3.55'
   })
 });
 
-// 4. Place Stop Loss (at $140)
-await fetch('/api/v1/drift/orders/stop-loss', {
+// 4. Place Take Profit
+await fetch('/api/v1/hypercore/orders/take-profit', {
   method: 'POST',
   headers: { 
     'Authorization': `Bearer ${accessToken}`,
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    marketIndex: 0,
-    direction: 'SHORT', // Opposite of position
-    baseAssetAmount: '1000000000',
-    triggerPrice: '140000000', // $140
-  })
-});
-
-// 5. Place Take Profit (at $180)
-await fetch('/api/v1/drift/orders/take-profit', {
-  method: 'POST',
-  headers: { 
-    'Authorization': `Bearer ${accessToken}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    marketIndex: 0,
-    direction: 'SHORT', // Opposite of position
-    baseAssetAmount: '1000000000',
-    triggerPrice: '180000000', // $180
+    coin: 'SUI',
+    isBuy: true,  // Same as position direction
+    size: '10',
+    takeProfitPrice: '4.50',
+    takeProfitTrigger: '4.45'
   })
 });
 ```
@@ -248,9 +235,9 @@ await fetch('/api/v1/drift/orders/take-profit', {
 ## Testing Scripts
 
 ```bash
-# Generate signature for testing (requires TEST_WALLET_SECRET_KEY in .env)
-npx tsx scripts/sign.ts <nonce>
-npx tsx scripts/sign.ts 478732
+# Generate EVM signature for testing (requires TEST_EVM_PRIVATE_KEY in .env)
+npx tsx scripts/evm-sign.ts <nonce>
+npx tsx scripts/evm-sign.ts 478732
 ```
 
 ## Scripts

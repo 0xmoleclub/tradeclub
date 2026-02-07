@@ -60,8 +60,8 @@ async function bootstrap() {
     .setVersion('2.0')
     .addBearerAuth()
     .addTag('Auth', 'Wallet-based authentication')
-    .addTag('Hyperliquid Wallets', 'Agent wallet management for Hyperliquid trading')
-    .addTag('Hyperliquid Trading', 'Perpetual trading on Hyperliquid')
+    .addTag('Hypercore Agent', 'Agent wallet management for Hyperliquid trading')
+    .addTag('Hypercore Trading', 'Perpetual trading on Hyperliquid')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);

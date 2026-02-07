@@ -25,10 +25,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // DEPRECATED: Solana wallet address - keeping for backward compatibility
-  walletAddress String?    @unique
-  
-  // PRIMARY: EVM wallet address (for Hypercore/Hyperliquid)
+  // EVM wallet address (primary for Hypercore/Hyperliquid)
   evmAddress    String?    @unique
   
   nonce         String?
@@ -56,7 +53,7 @@ model HypercoreWallet {
   // Agent wallet details
   agentAddress        String @unique  // Agent's public address (identifier on Hyperliquid)
   encryptedAgentKey   String          // Encrypted private key for signing orders
-  masterAddress       String          // User's master wallet that approved this agent
+  masterAddress       String?         // Optional: user's master wallet (for reference)
   
   encryptionVersion   String   @default("v1")
 

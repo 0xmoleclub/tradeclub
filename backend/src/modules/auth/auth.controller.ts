@@ -6,7 +6,7 @@ import {
   Query,
   Body,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiExtraModels, getSchemaPath } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -27,22 +27,14 @@ export class AuthController {
   @Public()
   @Post('login')
   @ApiOperation({ 
-    summary: 'Login with wallet signature',
+    summary: 'Login with EVM wallet signature',
     description: `
-Authenticate using wallet signature. Supports both EVM (Ethereum-compatible) and Solana wallets.
+Authenticate using EVM wallet signature.
 
-**EVM Login (Recommended for new users):**
-1. Call 
-GET /auth/nonce?walletAddress=0x... 
-to get nonce
-2. Sign message: 
-Sign this message to verify your wallet. Nonce: {nonce}
+**Steps:**
+1. Call GET /auth/nonce?walletAddress=0x... to get nonce
+2. Sign message: "Sign this message to verify your wallet. Nonce: {nonce}"
 3. Send signature (hex with 0x prefix) to this endpoint
-
-**Solana Login (Deprecated):**
-1. Call GET /auth/nonce?walletAddress=base58...
-2. Sign message with Solana wallet
-3. Send signature (base58) to this endpoint
     `,
   })
   @ApiResponse({ 
@@ -57,13 +49,11 @@ Sign this message to verify your wallet. Nonce: {nonce}
           properties: {
             id: { type: 'string', example: '550e8400-e29b-41d4-a716-446655440000' },
             evmAddress: { type: 'string', example: '0x742d35Cc6634C0532925a3b8D4e6D3b6e8d3e8B9' },
-            walletAddress: { type: 'string', example: null, description: 'Deprecated: Solana address' },
             role: { type: 'string', example: 'USER' },
             status: { type: 'string', example: 'ACTIVE' },
             lastLoginAt: { type: 'string', format: 'date-time' },
           },
         },
-        walletType: { type: 'string', enum: ['evm', 'solana'], example: 'evm' },
       },
     },
   })
@@ -78,11 +68,9 @@ Sign this message to verify your wallet. Nonce: {nonce}
   @ApiOperation({ 
     summary: 'Get nonce for signing',
     description: `
-Get a nonce to sign for wallet authentication.
+Get a nonce to sign for EVM wallet authentication.
 
-**For EVM wallets:** Pass EVM address (0x...)
-**For Solana wallets:** Pass Solana address (Base58)
-
+Pass EVM address (0x...) as query parameter.
 The nonce is valid for one login attempt and expires after use.
     `,
   })
@@ -120,7 +108,6 @@ The nonce is valid for one login attempt and expires after use.
       properties: {
         id: { type: 'string' },
         walletAddress: { type: 'string' },
-        walletType: { type: 'string', enum: ['evm', 'solana'] },
       },
     },
   })

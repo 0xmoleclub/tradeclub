@@ -51,25 +51,25 @@ export class HypercoreController {
   @Get('account')
   @ApiOperation({ summary: 'Get my account summary' })
   async getAccount(@CurrentUser() user: Payload) {
-    return this.hypercoreService.getAccountSummary(user.id);
+    return this.hypercoreService.getAccountSummary(user.id, user.walletAddress as `0x${string}`);
   }
 
   @Get('positions')
   @ApiOperation({ summary: 'Get all my positions' })
   async getPositions(@CurrentUser() user: Payload) {
-    return this.hypercoreService.getPositions(user.id);
+    return this.hypercoreService.getPositions(user.id, user.walletAddress as `0x${string}`);
   }
 
   @Get('positions/:coin')
   @ApiOperation({ summary: 'Get position for specific coin' })
   async getPositionForCoin(@CurrentUser() user: Payload, @Param('coin') coin: string) {
-    return this.hypercoreService.getPositionForCoin(user.id, coin);
+    return this.hypercoreService.getPositionForCoin(user.id, user.walletAddress as `0x${string}`, coin);
   }
 
   @Get('orders/open')
   @ApiOperation({ summary: 'Get my open orders' })
   async getOpenOrders(@CurrentUser() user: Payload) {
-    return this.hypercoreService.getOpenOrders(user.id);
+    return this.hypercoreService.getOpenOrders(user.id, user.walletAddress as `0x${string}`);
   }
 
   // ==================== OPEN POSITION ORDERS ====================
@@ -100,7 +100,7 @@ export class HypercoreController {
     description: 'Places a limit order to close/reduce existing position. Auto-detects position direction.',
   })
   async closeLimitOrder(@CurrentUser() user: Payload, @Body() dto: CloseLimitOrderDto) {
-    return this.hypercoreService.closeLimitOrder(user.id, dto);
+    return this.hypercoreService.closeLimitOrder(user.id, user.walletAddress as `0x${string}`, dto);
   }
 
   @Post('orders/market/close')
@@ -109,7 +109,7 @@ export class HypercoreController {
     description: 'Executes a market order to close/reduce existing position. Auto-detects position direction.',
   })
   async closeMarketOrder(@CurrentUser() user: Payload, @Body() dto: CloseMarketOrderDto) {
-    return this.hypercoreService.closeMarketOrder(user.id, dto);
+    return this.hypercoreService.closeMarketOrder(user.id, user.walletAddress as `0x${string}`, dto);
   }
 
   // ==================== TP/SL ORDERS ====================
@@ -120,7 +120,7 @@ export class HypercoreController {
     description: 'Places a TP trigger order. Cancels existing TP orders for the same coin.',
   })
   async placeTakeProfit(@CurrentUser() user: Payload, @Body() dto: TakeProfitOrderDto) {
-    return this.hypercoreService.placeTakeProfitOrder(user.id, dto);
+    return this.hypercoreService.placeTakeProfitOrder(user.id, user.walletAddress as `0x${string}`, dto);
   }
 
   @Post('orders/stop-loss')
@@ -129,7 +129,7 @@ export class HypercoreController {
     description: 'Places a SL trigger order. Cancels existing SL orders for the same coin.',
   })
   async placeStopLoss(@CurrentUser() user: Payload, @Body() dto: StopLossOrderDto) {
-    return this.hypercoreService.placeStopLossOrder(user.id, dto);
+    return this.hypercoreService.placeStopLossOrder(user.id, user.walletAddress as `0x${string}`, dto);
   }
 
   // ==================== CANCEL ORDERS ====================
@@ -143,7 +143,7 @@ export class HypercoreController {
   @Post('orders/cancel-all')
   @ApiOperation({ summary: 'Cancel all open orders' })
   async cancelAllOrders(@CurrentUser() user: Payload) {
-    return this.hypercoreService.cancelAllOrders(user.id);
+    return this.hypercoreService.cancelAllOrders(user.id, user.walletAddress as `0x${string}`);
   }
 
   // ==================== CLOSE ALL POSITIONS ====================
@@ -154,7 +154,7 @@ export class HypercoreController {
     description: 'Closes all open positions using market or limit at mid price',
   })
   async closeAllPositions(@CurrentUser() user: Payload, @Body() dto: CloseAllPositionsDto) {
-    return this.hypercoreService.closeAllPositions(user.id, dto.closeType);
+    return this.hypercoreService.closeAllPositions(user.id, user.walletAddress as `0x${string}`, dto.closeType);
   }
 
   // ==================== LEVERAGE & MARGIN ====================
