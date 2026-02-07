@@ -1,6 +1,6 @@
 {
   "include": ["src/**/*"],
-  "exclude": ["api", "node_modules"],
+  "exclude": ["api", "node_modules", "src/deprecated"],
   "compilerOptions": {
     "ignoreDeprecations": "5.0",
     "module": "commonjs",

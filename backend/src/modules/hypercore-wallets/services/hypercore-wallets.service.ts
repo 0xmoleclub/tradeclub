@@ -4,16 +4,10 @@ import { HypercoreWallet } from '@prisma/client';
 import { EvmCryptoService } from './evm-crypto.service';
 
 /**
- * Hypercore Agent Wallet Service - ULTRA SIMPLE
+ * Hypercore Agent Wallet Service
  * 
- * ONE endpoint: Create/Replace wallet
- * - If no wallet exists: creates new one
- * - If wallet exists: overwrites with new key (old one auto-revoked by HL via same agent name)
- * 
- * Frontend handles:
- * - ApproveAgent transaction on Hyperliquid
- * - Checking if agent is approved
- * - Revoking/rotating (just call this endpoint again!)
+ * Generates EVM keypairs for Hyperliquid trading agents.
+ * Private keys are encrypted and stored securely.
  */
 @Injectable()
 export class HypercoreWalletsService {
@@ -27,15 +21,14 @@ export class HypercoreWalletsService {
   /**
    * Create or REPLACE agent wallet for user
    * 
-   * If wallet exists: deletes old one, creates new one
-   * Hyperliquid auto-revokes old agent when new one with same name is approved
+   * - Generates new EVM keypair
+   * - Encrypts private key
+   * - Stores in database linked to user
+   * - Returns the agent address (public key)
    * 
-   * @returns agentAddress - frontend uses this for ApproveAgent tx
+   * @returns agentAddress - the public key to use on Hyperliquid
    */
-  async createOrReplaceWallet(
-    userId: string,
-    masterAddress: string,
-  ): Promise<{ agentAddress: string }> {
+  async createOrReplaceWallet(userId: string): Promise<{ agentAddress: string }> {
     // Generate new EVM keypair
     const keypair = this.evmCryptoService.generateKeypair();
     const encryptedAgentKey = this.evmCryptoService.encryptPrivateKey(keypair.privateKey);
@@ -47,18 +40,16 @@ export class HypercoreWalletsService {
         // Replace old wallet
         agentAddress: keypair.address,
         encryptedAgentKey,
-        masterAddress,
       },
       create: {
         // Create new wallet
         userId,
         agentAddress: keypair.address,
         encryptedAgentKey,
-        masterAddress,
       },
     });
 
-    this.logger.log(`Agent wallet for user ${userId}: ${keypair.address}`);
+    this.logger.log(`Agent wallet created for user ${userId}: ${keypair.address}`);
 
     return { agentAddress: keypair.address };
   }
@@ -66,12 +57,11 @@ export class HypercoreWalletsService {
   /**
    * Get user's agent wallet (for API response - no sensitive data)
    */
-  async getWallet(userId: string): Promise<Pick<HypercoreWallet, 'agentAddress' | 'masterAddress' | 'createdAt'> | null> {
+  async getWallet(userId: string): Promise<Pick<HypercoreWallet, 'agentAddress' | 'createdAt'> | null> {
     return this.prisma.hypercoreWallet.findUnique({
       where: { userId },
       select: {
         agentAddress: true,
-        masterAddress: true,
         createdAt: true,
       },
     });
@@ -90,21 +80,5 @@ export class HypercoreWalletsService {
     }
 
     return this.evmCryptoService.decryptPrivateKey(wallet.encryptedAgentKey);
-  }
-
-  /**
-   * Get master address for a user
-   */
-  async getMasterAddress(userId: string): Promise<string> {
-    const wallet = await this.prisma.hypercoreWallet.findUnique({
-      where: { userId },
-      select: { masterAddress: true },
-    });
-
-    if (!wallet) {
-      throw new Error('No agent wallet found');
-    }
-
-    return wallet.masterAddress;
   }
 }
