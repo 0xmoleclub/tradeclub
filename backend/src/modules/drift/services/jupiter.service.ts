@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
-import { AgentWalletsService } from '../../agent-wallets/services/agent-wallets.service';
+import { AgentWalletsService } from '../../drift-agent-wallets/services/agent-wallets.service';
 
 interface JupiterQuote {
   inputMint: string;

@@ -56,11 +56,12 @@ async function bootstrap() {
   // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('TradeClub API')
-    .setDescription(
-      'The TradeClub API documentation with signature-based authentication',
-    )
-    .setVersion('1.0')
+    .setDescription('TradeClub API with EVM wallet authentication and Hyperliquid trading')
+    .setVersion('2.0')
     .addBearerAuth()
+    .addTag('Auth', 'Wallet-based authentication')
+    .addTag('Hyperliquid Wallets', 'Agent wallet management for Hyperliquid trading')
+    .addTag('Hyperliquid Trading', 'Perpetual trading on Hyperliquid')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);

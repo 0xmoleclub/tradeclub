@@ -21,7 +21,7 @@ import {
 } from '@drift-labs/sdk';
 import { Connection, Keypair, PublicKey, Commitment, Transaction } from '@solana/web3.js';
 import { PrismaService } from '../../../database/prisma.service';
-import { AgentWalletsService } from '../../agent-wallets/services/agent-wallets.service';
+import { AgentWalletsService } from '../../drift-agent-wallets/services/agent-wallets.service';
 import { JupiterService } from './jupiter.service';
 import { PaymentMethod } from '../dto/deposit.dto';
 import {
@@ -1056,7 +1056,7 @@ export class DriftService implements OnModuleInit {
 
     // Mark account as activated on first deposit
     if (isFirstDeposit) {
-      await this.prisma.agentWallet.update({
+      await this.prisma.driftAgentWallet.update({
         where: { userId },
         data: {
           isActivated: true,

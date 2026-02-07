@@ -15,7 +15,7 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { DriftService } from './services/drift.service';
-import { AgentWalletsService } from '../agent-wallets/services/agent-wallets.service';
+import { AgentWalletsService } from '../drift-agent-wallets/services/agent-wallets.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Payload } from '../auth/auth.interface';

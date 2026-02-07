@@ -4,7 +4,8 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import { AgentWallet, AgentWalletStatus } from '@prisma/client';
+// DEPRECATED: Using DriftAgentWallet (renamed from AgentWallet)
+import { DriftAgentWallet as AgentWallet, AgentWalletStatus } from '@prisma/client';
 import { Keypair } from '@solana/web3.js';
 import { CryptoService } from './crypto.service';
 import { UsersService } from '../../users/users.service';
@@ -28,7 +29,7 @@ export class AgentWalletsService {
    */
   async createAgentWallet(userId: string): Promise<AgentWallet> {
     // Check if user already has an agent wallet
-    const existingWallet = await this.prisma.agentWallet.findUnique({
+    const existingWallet = await this.prisma.driftAgentWallet.findUnique({
       where: { userId },
     });
 
@@ -51,7 +52,7 @@ export class AgentWalletsService {
     );
 
     // Create agent wallet record
-    const agentWallet = await this.prisma.agentWallet.create({
+    const agentWallet = await this.prisma.driftAgentWallet.create({
       data: {
         userId,
         publicKey: keypair.publicKey.toBase58(),
@@ -70,7 +71,7 @@ export class AgentWalletsService {
    * Get agent wallet by user ID
    */
   async getAgentWalletByUserId(userId: string): Promise<AgentWallet | null> {
-    return this.prisma.agentWallet.findUnique({
+    return this.prisma.driftAgentWallet.findUnique({
       where: { userId },
     });
   }
@@ -79,7 +80,7 @@ export class AgentWalletsService {
    * Get agent wallet by user ID (safe - excludes encryptedSecretKey)
    */
   async getAgentWalletSafe(userId: string): Promise<Omit<AgentWallet, 'encryptedSecretKey'> | null> {
-    const wallet = await this.prisma.agentWallet.findUnique({
+    const wallet = await this.prisma.driftAgentWallet.findUnique({
       where: { userId },
       select: {
         id: true,
@@ -106,7 +107,7 @@ export class AgentWalletsService {
   async getAgentWalletByPublicKey(
     publicKey: string,
   ): Promise<AgentWallet | null> {
-    return this.prisma.agentWallet.findUnique({
+    return this.prisma.driftAgentWallet.findUnique({
       where: { publicKey },
     });
   }
@@ -119,7 +120,7 @@ export class AgentWalletsService {
     walletId: string,
     subaccountIndex: number = 0,
   ): Promise<AgentWallet> {
-    const wallet = await this.prisma.agentWallet.findUnique({
+    const wallet = await this.prisma.driftAgentWallet.findUnique({
       where: { id: walletId },
     });
 
@@ -127,7 +128,7 @@ export class AgentWalletsService {
       throw new NotFoundException('Agent wallet not found');
     }
 
-    return this.prisma.agentWallet.update({
+    return this.prisma.driftAgentWallet.update({
       where: { id: walletId },
       data: {
         isDelegated: true,
@@ -141,7 +142,7 @@ export class AgentWalletsService {
    * Revoke delegation
    */
   async revokeDelegation(walletId: string): Promise<AgentWallet> {
-    const wallet = await this.prisma.agentWallet.findUnique({
+    const wallet = await this.prisma.driftAgentWallet.findUnique({
       where: { id: walletId },
     });
 
@@ -149,7 +150,7 @@ export class AgentWalletsService {
       throw new NotFoundException('Agent wallet not found');
     }
 
-    return this.prisma.agentWallet.update({
+    return this.prisma.driftAgentWallet.update({
       where: { id: walletId },
       data: {
         isDelegated: false,
@@ -163,7 +164,7 @@ export class AgentWalletsService {
    * Mark agent wallet as activated (Drift account created)
    */
   async markAsActivated(walletId: string): Promise<AgentWallet> {
-    const wallet = await this.prisma.agentWallet.findUnique({
+    const wallet = await this.prisma.driftAgentWallet.findUnique({
       where: { id: walletId },
     });
 
@@ -171,7 +172,7 @@ export class AgentWalletsService {
       throw new NotFoundException('Agent wallet not found');
     }
 
-    return this.prisma.agentWallet.update({
+    return this.prisma.driftAgentWallet.update({
       where: { id: walletId },
       data: {
         isActivated: true,
@@ -185,7 +186,7 @@ export class AgentWalletsService {
    * Use with caution - only decrypt when needed for signing
    */
   async getSecretKey(walletId: string): Promise<Uint8Array> {
-    const wallet = await this.prisma.agentWallet.findUnique({
+    const wallet = await this.prisma.driftAgentWallet.findUnique({
       where: { id: walletId },
     });
 
@@ -200,7 +201,7 @@ export class AgentWalletsService {
    * Update cached gas balance (SOL)
    */
   async updateGasBalance(walletId: string, balance: string): Promise<void> {
-    await this.prisma.agentWallet.update({
+    await this.prisma.driftAgentWallet.update({
       where: { id: walletId },
       data: { gasBalance: balance },
     });
