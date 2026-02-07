@@ -56,36 +56,10 @@ async function bootstrap() {
   // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('TradeClub API')
-    .setDescription(
-      `## TradeClub API
-
-### Authentication
-This API supports **EVM (Ethereum-compatible)** and **Solana** wallet authentication via signature verification.
-
-**Recommended:** Use EVM wallets for new integrations.
-**Deprecated:** Solana support is maintained for backward compatibility.
-
-### Trading
-- **NEW:** Hyperliquid perpetual trading (EVM-based)
-- **DEPRECATED:** Drift Protocol (Solana-based) - modules disabled
-
-### Key Changes
-| Feature | Old | New |
-|---------|-----|-----|
-| Wallet | Solana | EVM (0x...) |
-| Trading | Drift | Hyperliquid |
-| Signature | Ed25519 (Base58) | ECDSA (Hex) |
-
-### Quick Start
-1. Call \`GET /auth/nonce?walletAddress=0x...\` to get a nonce
-2. Sign message: \`Sign this message to verify your wallet. Nonce: {nonce}\`
-3. Call \`POST /auth/login\` with wallet address and signature
-4. Use returned JWT token for authenticated requests
-      `,
-    )
+    .setDescription('TradeClub API with EVM wallet authentication and Hyperliquid trading')
     .setVersion('2.0')
     .addBearerAuth()
-    .addTag('Auth', 'Wallet-based authentication (EVM & Solana)')
+    .addTag('Auth', 'Wallet-based authentication')
     .addTag('Hyperliquid Wallets', 'Agent wallet management for Hyperliquid trading')
     .addTag('Hyperliquid Trading', 'Perpetual trading on Hyperliquid')
     .build();
