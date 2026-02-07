@@ -3,10 +3,10 @@
  * Sign login message with test wallet from env
  * 
  * Usage:
- *   npx tsx scripts/sign.ts <nonce>
+ *   npx tsx scripts/solana-sign.ts <nonce>
  * 
  * Example:
- *   npx tsx scripts/sign.ts 478732
+ *   npx tsx scripts/solana-sign.ts 478732
  * 
  * Required env:
  *   TEST_WALLET_SECRET_KEY=base58_secret_key
