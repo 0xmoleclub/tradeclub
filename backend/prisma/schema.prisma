@@ -20,7 +20,15 @@ enum UserStatus {
   PENDING
 }
 
+// DEPRECATED: Solana/Drift - Keeping for migration purposes
 enum AgentWalletStatus {
+  ACTIVE
+  INACTIVE
+  REVOKED
+}
+
+// NEW: Hyperliquid agent wallet status
+enum HyperliquidWalletStatus {
   ACTIVE
   INACTIVE
   REVOKED
@@ -31,8 +39,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Wallet Auth
-  walletAddress String    @unique
+  // DEPRECATED: Solana wallet address - keeping for backward compatibility
+  walletAddress String?    @unique
+  
+  // NEW: EVM wallet address (primary for Hyperliquid)
+  evmAddress    String?    @unique
+  
   nonce         String?
   lastLoginAt   DateTime?
 
@@ -42,18 +54,22 @@ model User {
   role   UserRole   @default(USER)
   status UserStatus @default(ACTIVE)
 
-  // Relations - Agent wallet is optional, created later
-  agentWallet AgentWallet?
+  // DEPRECATED: Drift/Solana agent wallet
+  driftAgentWallet DriftAgentWallet? @relation("DriftAgentWallet")
+  
+  // NEW: Hyperliquid agent wallet
+  hyperliquidWallet HyperliquidWallet? @relation("HyperliquidWallet")
 }
 
-model AgentWallet {
+// DEPRECATED: Solana/Drift agent wallet - renamed from AgentWallet
+model DriftAgentWallet {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
   userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, name: "DriftAgentWallet")
 
   // Solana Wallet
   publicKey          String @unique
@@ -77,4 +93,46 @@ model AgentWallet {
 
   @@index([userId])
   @@index([publicKey])
+  @@map("AgentWallet") // Keep the same table name for migration safety
+}
+
+// NEW: Hyperliquid agent wallet for EVM/Hyperliquid integration
+model HyperliquidWallet {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, name: "HyperliquidWallet")
+
+  // Agent Wallet (signing key - separate EVM keypair)
+  agentAddress        String @unique // EVM 0x... address
+  encryptedAgentKey   String // Encrypted private key (hex)
+
+  // Master account that approved this agent (user's main wallet)
+  masterAddress       String // EVM 0x... address
+
+  // Optional: Named agent for Hyperliquid
+  agentName           String?
+
+  // Subaccount this agent trades on (default: 0 = master)
+  subaccountIndex     Int      @default(0)
+
+  // Approval status
+  isApproved          Boolean  @default(false)
+  approvedAt          DateTime?
+
+  // Nonce tracking (Hyperliquid-specific: 100 highest nonces per signer)
+  lastNonce           BigInt   @default(0)
+  
+  // Wallet status
+  status              HyperliquidWalletStatus @default(ACTIVE)
+
+  // Encryption version
+  encryptionVersion   String @default("v1")
+
+  @@index([userId])
+  @@index([masterAddress])
+  @@index([agentAddress])
 }

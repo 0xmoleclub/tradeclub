@@ -8,8 +8,14 @@ import { SharedModule } from './shared/shared.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
-import { AgentWalletsModule } from './modules/agent-wallets/agent-wallets.module';
-import { DriftModule } from './modules/drift/drift.module';
+
+// NEW: EVM/Hyperliquid modules
+import { HyperliquidWalletsModule } from './modules/hyperliquid-wallets/hyperliquid-wallets.module';
+import { HyperliquidModule } from './modules/hyperliquid/hyperliquid.module';
+
+// DEPRECATED: Solana/Drift modules - commented out for EVM/Hyperliquid migration
+// import { AgentWalletsModule } from './modules/drift-agent-wallets/drift-agent-wallets.module';
+// import { DriftModule } from './modules/drift/drift.module';
 
 @Module({
   imports: [
@@ -40,8 +46,14 @@ import { DriftModule } from './modules/drift/drift.module';
     AuthModule,
     UsersModule,
     HealthModule,
-    AgentWalletsModule,
-    DriftModule,
+    
+    // NEW: EVM/Hyperliquid modules
+    HyperliquidWalletsModule,
+    HyperliquidModule,
+    
+    // DEPRECATED: Solana/Drift modules - migrating to EVM/Hyperliquid
+    // DriftAgentWalletsModule,
+    // DriftModule,
   ],
 })
 export class AppModule {}
