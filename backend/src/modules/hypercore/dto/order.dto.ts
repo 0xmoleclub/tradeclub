@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, Min, Max, ValidateNested } from 'class-validator';
 
 export enum TimeInForce {
   GTC = 'Gtc',
@@ -157,15 +157,16 @@ export class TwapDto {
   @IsString()
   size: string;
 
-  @ApiProperty({ description: 'Seconds between each order', example: 30 })
+  @ApiProperty({ description: 'Duration in minutes (5-1440)', example: 10, minimum: 5, maximum: 1440 })
   @IsNumber()
-  @Min(1)
-  frequencySeconds: number;
+  @Min(5)
+  @Max(1440)
+  durationMinutes: number;
 
-  @ApiProperty({ description: 'Total duration in seconds', example: 300 })
-  @IsNumber()
-  @Min(1)
-  durationSeconds: number;
+  @ApiPropertyOptional({ description: 'Enable random order timing', default: true })
+  @IsOptional()
+  @IsBoolean()
+  randomize?: boolean;
 }
 
 // ==================== CLOSE ALL POSITIONS ====================

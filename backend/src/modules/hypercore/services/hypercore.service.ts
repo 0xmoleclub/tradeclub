@@ -73,7 +73,7 @@ export class HypercoreService {
   }
 
   /**
-   * Detect actual price decimals from orderbook - THIS IS THE KEY!
+   * Detect actual price decimals from orderbook - Hyperliquid szDecimals don't apply to tick size like how they claimed in the docs, this is the best way to get correct price precision
    * Read the actual prices from L2 book to see how many decimals Hyperliquid uses
    */
   private async detectPriceDecimals(coin: string): Promise<number> {
@@ -105,45 +105,7 @@ export class HypercoreService {
   }
 
   /**
-   * Get tick size from orderbook by looking at price differences between levels
-   */
-  private async getTickSizeFromOrderbook(coin: string): Promise<number> {
-    try {
-      const orderbook = await this.infoClient.l2Book({ coin });
-      if (!orderbook?.levels) {
-        return 0.01; // default fallback
-      }
-      
-      const bids = orderbook.levels[0];
-      const asks = orderbook.levels[1];
-      
-      // Try to find tick size from bid spread
-      if (bids && bids.length >= 2) {
-        const p1 = Number(bids[0].px);
-        const p2 = Number(bids[1].px);
-        const diff = Math.abs(p1 - p2);
-        if (diff > 0) return diff;
-      }
-      
-      // Try ask spread
-      if (asks && asks.length >= 2) {
-        const p1 = Number(asks[0].px);
-        const p2 = Number(asks[1].px);
-        const diff = Math.abs(p1 - p2);
-        if (diff > 0) return diff;
-      }
-      
-      // Fallback: derive from decimal places
-      const decimals = await this.detectPriceDecimals(coin);
-      return Math.pow(10, -decimals);
-    } catch (error) {
-      this.logger.error(`Failed to get tick size for ${coin}:`, error);
-      return 0.01;
-    }
-  }
-
-  /**
-   * Format price to match orderbook precision
+   * Format price to match orderbook precision (detected from L2 book)
    */
   private async formatPrice(price: number, coin: string): Promise<string> {
     const decimals = await this.detectPriceDecimals(coin);
@@ -728,39 +690,43 @@ export class HypercoreService {
     }
   }
 
-  // ==================== TWAP (Simplified) ====================
+  // ==================== TWAP (Native Hyperliquid) ====================
 
   async twap(userId: string, twap: TwapDto) {
     try {
       const exchange = await this.createExchangeClient(userId);
       const asset = await this.getAssetNumberByCoin(twap.coin);
-
-      const totalSlices = Math.floor(twap.durationSeconds / twap.frequencySeconds);
-      if (totalSlices < 1) throw new BadRequestException('Duration too short for frequency');
-
       const assetInfo = await this.getAssetMetadata(asset);
-      const sliceSize = Number(twap.size) / totalSlices;
-      const formattedSliceSize = this.roundToDecimals(sliceSize, assetInfo.szDecimals);
-
-      // this.logger.log(`TWAP plan: ${totalSlices} slices of ${formattedSliceSize} ${twap.coin}`);
-
-      return {
-        success: true,
-        message: 'TWAP plan created',
-        plan: {
-          coin: twap.coin,
-          isBuy: twap.isBuy,
-          totalSize: twap.size,
-          sliceSize: formattedSliceSize,
-          totalSlices,
-          frequencySeconds: twap.frequencySeconds,
-          durationSeconds: twap.durationSeconds,
+      
+      // Format size to szDecimals
+      const formattedSize = this.roundToDecimals(twap.size, assetInfo.szDecimals);
+      
+      // Use native Hyperliquid TWAP
+      const result = await exchange.twapOrder({
+        twap: {
+          a: asset,
+          b: twap.isBuy,
+          s: formattedSize,
+          r: false,
+          m: twap.durationMinutes,
+          t: twap.randomize ?? true,
         },
-        note: 'TWAP execution not implemented in this version. Use individual market orders.',
-      };
+      });
+
+      if (result?.status === 'ok') {
+        const twapId = result.response?.data?.status?.running?.twapId;
+        return {
+          success: true,
+          message: 'TWAP order placed',
+          twapId,
+          data: result.response?.data,
+        };
+      }
+      
+      throw new BadRequestException(`TWAP order failed: ${JSON.stringify(result)}`);
     } catch (error) {
       this.logger.error(`twap error:`, error);
-      throw new BadRequestException(`Failed to create TWAP: ${error.message}`);
+      throw new BadRequestException(`Failed to place TWAP: ${error.message}`);
     }
   }
 }
