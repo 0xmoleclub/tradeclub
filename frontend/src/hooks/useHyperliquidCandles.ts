@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 export interface Candle {
   time: number;
@@ -32,44 +32,69 @@ const intervalToGranularity = (interval: string): string => {
   return map[interval] || '15m';
 };
 
+const intervalToMs = (interval: string): number => {
+  const map: Record<string, number> = {
+    '1m': 60 * 1000,
+    '5m': 5 * 60 * 1000,
+    '15m': 15 * 60 * 1000,
+    '1h': 60 * 60 * 1000,
+    '4h': 4 * 60 * 60 * 1000,
+    '1d': 24 * 60 * 60 * 1000,
+  };
+  return map[interval] || 15 * 60 * 1000;
+};
+
 const API_URL = 'https://api.hyperliquid.xyz/info';
 
-export const useHyperliquidCandles = (symbol: string, interval: string = '15m') => {
-  const [candles, setCandles] = useState<Candle[]>([]);
-  const wsRef = useRef<WebSocket | null>(null);
+interface UseCandlesReturn {
+  candles: Candle[];
+  isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMoreData: boolean;
+  loadMore: (beforeTime: number) => Promise<void>;
+}
 
-  // Fetch historical candles
+export const useHyperliquidCandles = (
+  symbol: string, 
+  interval: string = '15m'
+): UseCandlesReturn => {
+  const [candles, setCandles] = useState<Candle[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreData, setHasMoreData] = useState(true);
+  const wsRef = useRef<WebSocket | null>(null);
+  const candlesRef = useRef<Candle[]>([]);
+  const isInitialLoadRef = useRef(true);
+
+  // Keep ref in sync
+  useEffect(() => {
+    candlesRef.current = candles;
+  }, [candles]);
+
+  // Fetch initial candles
   useEffect(() => {
     const fetchCandles = async () => {
+      setIsLoading(true);
+      setHasMoreData(true);
+      isInitialLoadRef.current = true;
+      
       const coin = symbolToCoin(symbol);
       const granularity = intervalToGranularity(interval);
+      const intervalMs = intervalToMs(interval);
       
-      // Get ~48 candles of history based on interval
       const endTime = Date.now();
-      const intervalMs = {
-        '1m': 60 * 1000,
-        '5m': 5 * 60 * 1000,
-        '15m': 15 * 60 * 1000,
-        '1h': 60 * 60 * 1000,
-        '4h': 4 * 60 * 60 * 1000,
-        '1d': 24 * 60 * 60 * 1000,
-      }[interval] || 15 * 60 * 1000;
-      
-      // Request 50 candles worth of data
-      const startTime = endTime - (intervalMs * 50);
+      // Request 200 candles for initial load (more data = better initial view)
+      const startTime = endTime - (intervalMs * 200);
 
-      // Hyperliquid API format - use 'interval' not 'granularity'
       const requestBody = {
         type: 'candleSnapshot',
         req: {
-          coin: coin,
+          coin,
           startTime: Math.floor(startTime),
           endTime: Math.floor(endTime),
-          interval: granularity  // API expects 'interval', not 'granularity'
+          interval: granularity
         }
       };
-
-      console.log('[Candles] Request:', requestBody);
 
       try {
         const response = await fetch(API_URL, {
@@ -78,18 +103,18 @@ export const useHyperliquidCandles = (symbol: string, interval: string = '15m') 
           body: JSON.stringify(requestBody)
         });
 
-        const text = await response.text();
-        console.log('[Candles] Status:', response.status);
-
         if (!response.ok) {
+          const text = await response.text();
           console.error('[Candles] Error:', text);
+          setIsLoading(false);
           return;
         }
 
-        const data = JSON.parse(text);
+        const data = await response.json();
         
         if (!Array.isArray(data)) {
           console.error('[Candles] Not array:', data);
+          setIsLoading(false);
           return;
         }
 
@@ -102,15 +127,89 @@ export const useHyperliquidCandles = (symbol: string, interval: string = '15m') 
           volume: parseFloat(c.v),
         })).sort((a, b) => a.time - b.time);
 
-        console.log('[Candles] Got', formatted.length, 'candles');
-        setCandles(formatted.slice(-48));
+        setCandles(formatted);
+        isInitialLoadRef.current = false;
       } catch (err) {
         console.error('[Candles] Fetch failed:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchCandles();
   }, [symbol, interval]);
+
+  // Load more historical candles (for infinite scroll)
+  const loadMore = useCallback(async (beforeTime: number): Promise<void> => {
+    if (isLoadingMore || !hasMoreData) return;
+
+    setIsLoadingMore(true);
+    
+    const coin = symbolToCoin(symbol);
+    const granularity = intervalToGranularity(interval);
+    const intervalMs = intervalToMs(interval);
+    
+    // Fetch 100 more candles before the current oldest
+    const endTime = beforeTime * 1000; // Convert back to ms
+    const startTime = endTime - (intervalMs * 100);
+
+    const requestBody = {
+      type: 'candleSnapshot',
+      req: {
+        coin,
+        startTime: Math.floor(startTime),
+        endTime: Math.floor(endTime),
+        interval: granularity
+      }
+    };
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        console.error('[Candles] Load more error:', await response.text());
+        return;
+      }
+
+      const data = await response.json();
+      
+      if (!Array.isArray(data) || data.length === 0) {
+        setHasMoreData(false);
+        return;
+      }
+
+      const newCandles: Candle[] = data.map((c: any) => ({
+        time: Math.floor(c.t / 1000),
+        open: parseFloat(c.o),
+        high: parseFloat(c.h),
+        low: parseFloat(c.l),
+        close: parseFloat(c.c),
+        volume: parseFloat(c.v),
+      })).sort((a, b) => a.time - b.time);
+
+      // Merge new candles with existing, avoiding duplicates
+      setCandles(prev => {
+        const merged = [...newCandles, ...prev];
+        const unique = merged.filter((c, idx, arr) => 
+          idx === arr.findIndex(t => t.time === c.time)
+        );
+        return unique.sort((a, b) => a.time - b.time);
+      });
+
+      // If we got fewer than 50 candles, probably no more data
+      if (newCandles.length < 50) {
+        setHasMoreData(false);
+      }
+    } catch (err) {
+      console.error('[Candles] Load more failed:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [symbol, interval, isLoadingMore, hasMoreData]);
 
   // WebSocket for live updates
   useEffect(() => {
@@ -144,10 +243,16 @@ export const useHyperliquidCandles = (symbol: string, interval: string = '15m') 
             const updated = [...prev];
             const idx = updated.findIndex(c => c.time === newCandle.time);
             
-            if (idx >= 0) updated[idx] = newCandle;
-            else updated.push(newCandle);
+            if (idx >= 0) {
+              // Update existing candle
+              updated[idx] = newCandle;
+            } else {
+              // Add new candle, keep sorted
+              updated.push(newCandle);
+              updated.sort((a, b) => a.time - b.time);
+            }
             
-            return updated.sort((a, b) => a.time - b.time).slice(-48);
+            return updated;
           });
         }
       } catch (err) {
@@ -158,5 +263,11 @@ export const useHyperliquidCandles = (symbol: string, interval: string = '15m') 
     return () => ws.close();
   }, [symbol, interval]);
 
-  return { candles };
+  return { 
+    candles, 
+    isLoading, 
+    isLoadingMore, 
+    hasMoreData,
+    loadMore 
+  };
 };
