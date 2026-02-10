@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useDriftOrderbook } from "@/hooks/useDriftOrderbook";
+import { useHyperliquidOrderbook } from "@/hooks/useHyperliquidOrderbook";
 
 interface RowProps {
   price: number;
@@ -35,8 +35,8 @@ interface OrderBookProps {
   symbol?: string;
 }
 
-export const OrderBook = ({ symbol = "SOL-PERP" }: OrderBookProps) => {
-  const { orderbook, loading, error } = useDriftOrderbook(symbol);
+export const OrderBook = ({ symbol = "BTC-PERP" }: OrderBookProps) => {
+  const { orderbook, loading, error } = useHyperliquidOrderbook(symbol);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -143,7 +143,7 @@ export const OrderBook = ({ symbol = "SOL-PERP" }: OrderBookProps) => {
       
       {/* Footer */}
       <div className="px-2 py-1.5 border-t border-white/10 text-[9px] text-gray-500 flex justify-between">
-        <span>Drift Devnet</span>
+        <span>Hyperliquid</span>
         <span className={loading ? "text-cyan-500" : "text-green-500"}>
           {loading ? "Updating..." : "Live"}
         </span>

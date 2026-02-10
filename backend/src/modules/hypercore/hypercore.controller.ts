@@ -6,7 +6,7 @@ import {
   UseGuards,
   Param,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { HypercoreService } from './services/hypercore.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -31,20 +31,6 @@ import {
 @ApiBearerAuth()
 export class HypercoreController {
   constructor(private readonly hypercoreService: HypercoreService) {}
-
-  // ==================== MARKET DATA ====================
-
-  @Get('markets')
-  @ApiOperation({ summary: 'Get available perpetual markets' })
-  async getMarkets() {
-    return this.hypercoreService.getMarkets();
-  }
-
-  @Get('markets/:coin/price')
-  @ApiOperation({ summary: 'Get current price for a coin' })
-  async getPrice(@Param('coin') coin: string) {
-    return this.hypercoreService.getPrice(coin);
-  }
 
   // ==================== ACCOUNT ====================
 

@@ -112,23 +112,6 @@ export class HypercoreService {
     return price.toFixed(decimals);
   }
 
-  // ==================== MARKET DATA ====================
-
-  async getMarkets() {
-    const meta = await this.infoClient.meta();
-    return {
-      success: true,
-      markets: meta.universe,
-    };
-  }
-
-  async getPrice(coin: string) {
-    const mids = await this.infoClient.allMids();
-    const price = mids[coin];
-    if (!price) throw new BadRequestException(`Price not found for ${coin}`);
-    return { success: true, coin, price };
-  }
-
   // ==================== ACCOUNT ====================
 
   async getAccountSummary(userId: string, walletAddress: `0x${string}`) {

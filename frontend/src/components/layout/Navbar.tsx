@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Sword, Trophy, Cpu, Wallet, Repeat, TrendingUp, Eye, Dice5 } from "lucide-react";
+import { ChevronDown, Sword, Trophy, Cpu, Repeat, TrendingUp, Eye, Wallet } from "lucide-react";
+import { WalletButton } from "@/components/ui/WalletButton";
 
 const NAV_MENU = [
   {
@@ -137,9 +138,7 @@ export const Navbar = () => {
 
         {/* Right Action */}
         <div className="flex items-center gap-6 z-50">
-          <button className="px-8 py-3 bg-neon/10 border border-neon/50 text-neon font-black text-xs uppercase tracking-[0.2em] hover:bg-neon hover:text-black transition-all skew-x-[-15deg] transform hover:scale-105 active:scale-95 duration-200 shadow-[0_0_20px_rgba(208,0,255,0.2)]">
-            <span className="skew-x-[15deg] inline-block">Connect Wallet</span>
-          </button>
+          <WalletButton variant="nav" />
         </div>
       </div>
     </nav>
