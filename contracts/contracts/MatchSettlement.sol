@@ -13,30 +13,55 @@ contract MatchSettlement {
         address disputer;
         uint256 proposedAt;
         bool disputed;
+        bytes32 dataHash;
+        bytes32 codeCommitHash;
     }
 
     IERC20 public immutable bondToken;
     uint256 public immutable disputeWindow;
     uint256 public immutable bondAmount;
+    address public immutable proposerSigner;
 
     mapping(bytes32 => Proposal) public proposals;
     mapping(bytes32 => bool) public finalized;
     mapping(bytes32 => uint8) public finalOutcome;
 
-    event OutcomeProposed(bytes32 indexed matchId, uint8 outcome, address indexed proposer, uint256 proposedAt);
+    event OutcomeProposed(
+        bytes32 indexed matchId,
+        uint8 outcome,
+        address indexed proposer,
+        uint256 proposedAt,
+        bytes32 dataHash,
+        bytes32 codeCommitHash
+    );
     event OutcomeDisputed(bytes32 indexed matchId, address indexed disputer);
     event OutcomeFinalized(bytes32 indexed matchId, uint8 outcome);
     event DisputeCleared(bytes32 indexed matchId);
 
-    constructor(address bondToken_, uint256 disputeWindow_, uint256 bondAmount_) {
+    constructor(
+        address bondToken_,
+        uint256 disputeWindow_,
+        uint256 bondAmount_,
+        address proposerSigner_
+    ) {
         bondToken = IERC20(bondToken_);
         disputeWindow = disputeWindow_;
         bondAmount = bondAmount_;
+        proposerSigner = proposerSigner_;
     }
 
-    function proposeOutcome(bytes32 matchId, uint8 outcome) external {
+    function proposeOutcome(
+        bytes32 matchId,
+        uint8 outcome,
+        bytes32 dataHash,
+        bytes32 codeCommitHash
+    ) external {
+        require(msg.sender == proposerSigner, "not proposer");
         Proposal storage existing = proposals[matchId];
-        require(existing.proposedAt == 0 || existing.disputed, "active proposal");
+        require(
+            existing.proposedAt == 0 || existing.disputed,
+            "active proposal"
+        );
 
         bondToken.safeTransferFrom(msg.sender, address(this), bondAmount);
         proposals[matchId] = Proposal({
@@ -44,17 +69,29 @@ contract MatchSettlement {
             proposer: msg.sender,
             disputer: address(0),
             proposedAt: block.timestamp,
-            disputed: false
+            disputed: false,
+            dataHash: dataHash,
+            codeCommitHash: codeCommitHash
         });
 
-        emit OutcomeProposed(matchId, outcome, msg.sender, block.timestamp);
+        emit OutcomeProposed(
+            matchId,
+            outcome,
+            msg.sender,
+            block.timestamp,
+            dataHash,
+            codeCommitHash
+        );
     }
 
     function disputeOutcome(bytes32 matchId) external {
         Proposal storage proposal = proposals[matchId];
         require(proposal.proposedAt != 0, "no proposal");
         require(!proposal.disputed, "already disputed");
-        require(block.timestamp <= proposal.proposedAt + disputeWindow, "window passed");
+        require(
+            block.timestamp <= proposal.proposedAt + disputeWindow,
+            "window passed"
+        );
 
         bondToken.safeTransferFrom(msg.sender, address(this), bondAmount);
         proposal.disputed = true;
@@ -67,7 +104,10 @@ contract MatchSettlement {
         Proposal storage proposal = proposals[matchId];
         require(proposal.proposedAt != 0, "no proposal");
         require(!proposal.disputed, "disputed");
-        require(block.timestamp > proposal.proposedAt + disputeWindow, "window open");
+        require(
+            block.timestamp > proposal.proposedAt + disputeWindow,
+            "window open"
+        );
         require(!finalized[matchId], "finalized");
 
         finalized[matchId] = true;
@@ -81,7 +121,10 @@ contract MatchSettlement {
     function clearDispute(bytes32 matchId) external {
         Proposal storage proposal = proposals[matchId];
         require(proposal.disputed, "not disputed");
-        require(block.timestamp > proposal.proposedAt + disputeWindow, "window open");
+        require(
+            block.timestamp > proposal.proposedAt + disputeWindow,
+            "window open"
+        );
 
         // Refund both bonds (proposer + disputer). This resets the proposal state.
         bondToken.safeTransfer(proposal.proposer, bondAmount);
@@ -92,7 +135,9 @@ contract MatchSettlement {
         emit DisputeCleared(matchId);
     }
 
-    function getOutcome(bytes32 matchId) external view returns (bool isFinalized, uint8 outcome) {
+    function getOutcome(
+        bytes32 matchId
+    ) external view returns (bool isFinalized, uint8 outcome) {
         return (finalized[matchId], finalOutcome[matchId]);
     }
 }
