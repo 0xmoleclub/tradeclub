@@ -11,6 +11,9 @@ importers:
       '@openzeppelin/contracts':
         specifier: ^5.0.2
         version: 5.4.0
+      '@prb/math':
+        specifier: ^3.3.0
+        version: 3.3.1
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -322,6 +325,10 @@ packages:
 
   '@openzeppelin/contracts@5.4.0':
     resolution: {integrity: sha512-eCYgWnLg6WO+X52I16TZt8uEjbtdkgLC0SUX/xnAksjjrQI4Xfn4iBRoI5j55dmlOhDv1Y7BoR3cU7e3WWhC6A==}
+
+  '@prb/math@3.3.1':
+    resolution: {integrity: sha512-k1nnpZwCvvztainqJfvkYpBQuZ3pHKnS6vovUAp+i1hSzlcSWluM+nRxxZbb6wsXqyCJAxrw8Vd7bAG/VeMIUA==}
+    deprecated: v3 contains bugs, please upgrade to v4
 
   '@scure/base@1.1.9':
     resolution: {integrity: sha512-8YKhl8GHiNI/pU2VMaofa2Tor7PJRAjwQLBBuilkJ9L5+13yVbC7JO/wS7piioAvPSwR3JKM1IJ/u4xQzbcXKg==}
@@ -2504,6 +2511,8 @@ snapshots:
       '@nomicfoundation/solidity-analyzer-win32-x64-msvc': 0.1.2
 
   '@openzeppelin/contracts@5.4.0': {}
+
+  '@prb/math@3.3.1': {}
 
   '@scure/base@1.1.9': {}
 

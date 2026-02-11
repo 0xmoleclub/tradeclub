@@ -2,7 +2,6 @@
   "name": "@tradeclub/contracts",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
   "scripts": {
     "hardhat:compile": "hardhat compile",
     "hardhat:deploy": "hardhat run scripts/deploy.ts",
@@ -17,6 +16,7 @@
     "typescript": "^5.5.4"
   },
   "dependencies": {
+    "@prb/math": "^3.3.0",
     "@openzeppelin/contracts": "^5.0.2",
     "dotenv": "^16.4.5"
   }
