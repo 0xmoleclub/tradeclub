@@ -1,0 +1,23 @@
+{
+  "name": "@tradeclub/contracts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "hardhat:compile": "hardhat compile",
+    "hardhat:deploy": "hardhat run scripts/deploy.ts",
+    "hardhat:test": "hardhat test",
+    "forge:build": "forge build",
+    "forge:test": "forge test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.22.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.2",
+    "dotenv": "^16.4.5"
+  }
+}
