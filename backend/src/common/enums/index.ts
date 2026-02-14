@@ -9,6 +9,7 @@ export enum UserStatus {
   INACTIVE = 'inactive',
   SUSPENDED = 'suspended',
   PENDING = 'pending',
+  IN_BATTLE = 'in_battle',
 }
 
 export enum PositionDirectionEnum {
@@ -22,4 +23,28 @@ export enum OrderTypeEnum {
   TRIGGER_LIMIT = 'triggerLimit',
   MARKET = 'market',
   ORACLE = 'oracle',
+}
+
+export enum BattleStatus {
+  PENDING = 'PENDING',
+  MATCHING = 'MATCHING',
+  RUNNING = 'RUNNING',
+  FINISHED = 'FINISHED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum BattlePlayerStatus {
+  JOINED = 'JOINED',
+  READY = 'READY',
+  PLAYING = 'PLAYING',
+  DISCONNECTED = 'DISCONNECTED',
+  LEFT = 'LEFT',
+  FINISHED = 'FINISHED',
+}
+
+export enum MetricType {
+  PNL = 'PNL',
+  VOLUME = 'VOLUME',
+  ROI = 'ROI',
+  WIN_RATE = 'WIN_RATE',
 }

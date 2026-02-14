@@ -18,6 +18,30 @@ enum UserStatus {
   INACTIVE
   SUSPENDED
   PENDING
+  IN_BATTLE
+}
+
+enum BattlePlayerStatus {
+  JOINED
+  READY
+  PLAYING
+  DISCONNECTED
+  LEFT
+  FINISHED
+}
+
+enum BattleStatus {
+  MATCHING
+  RUNNING
+  FINISHED
+  CANCELLED
+}
+
+enum MetricType {
+  PNL
+  VOLUME
+  ROI
+  WIN_RATE
 }
 
 model User {
@@ -27,7 +51,7 @@ model User {
 
   // EVM wallet address (primary for Hypercore/Hyperliquid)
   evmAddress    String?    @unique
-  
+
   nonce         String?
   lastLoginAt   DateTime?
 
@@ -36,9 +60,16 @@ model User {
   avatar String?
   role   UserRole   @default(USER)
   status UserStatus @default(ACTIVE)
-  
+
+  // Match Making
+  elo Int @default(1000)
+  rankPoints Int @default(0)
+
   // Relations
   hypercoreWallet HypercoreWallet? @relation("HypercoreWallet")
+  battlePlayers	  BattlePlayer[]
+
+  @@index([elo])
 }
 
 // Hypercore Agent Wallet - EVM-based agent for Hyperliquid trading
@@ -54,9 +85,89 @@ model HypercoreWallet {
   agentAddress        String @unique  // Agent's public address (identifier on Hyperliquid)
   encryptedAgentKey   String          // Encrypted private key for signing orders
   masterAddress       String?         // Optional: user's master wallet (for reference)
-  
+
   encryptionVersion   String   @default("v1")
 
   @@index([userId])
   @@index([agentAddress])
+}
+
+model Battle {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  status     BattleStatus  @default(MATCHING)
+  maxPlayers Int           @default(4)
+
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  metadata Json?
+
+  // Relations
+  players BattlePlayer[]
+  results BattleResult[]
+}
+
+model BattlePlayer {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  battleId  String
+  battle    Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+
+  status BattlePlayerStatus @default(JOINED)
+  slot Int // 1 -> 4 Player position
+  joinedAt DateTime @default(now())
+  finishedAt DateTime?
+
+  // Snapshot at match time
+  eloSnapshot Int
+
+  @@unique([battleId, slot])
+  @@index([userId])
+  @@index([battleId])
+}
+
+model BattleResult {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  battleId String
+  battle   Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+
+  // Description of judgement
+  name String
+
+  // Deterministic hash of all evaluated data
+  dataHash String
+
+  // Final label
+  isCorrect Boolean
+
+  // Traceability
+  codeCommitHash String
+
+  dataPoints BattleResultData[]
+
+  @@index([battleId])
+}
+
+model BattleResultData {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  battleResultId String
+  battleResult   BattleResult @relation(fields: [battleResultId], references: [id], onDelete: Cascade)
+
+  metric MetricType
+  playerSlot Int // 1 → 4
+  value Decimal @db.Decimal(38, 18)
+
+  @@unique([battleResultId, metric, playerSlot])
+  @@index([metric])
 }
