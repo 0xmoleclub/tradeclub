@@ -9,6 +9,7 @@ export enum UserStatus {
   INACTIVE = 'inactive',
   SUSPENDED = 'suspended',
   PENDING = 'pending',
+  IN_BATTLE = 'in_battle',
 }
 
 export enum PositionDirectionEnum {
@@ -30,6 +31,15 @@ export enum BattleStatus {
   RUNNING = 'RUNNING',
   FINISHED = 'FINISHED',
   CANCELLED = 'CANCELLED',
+}
+
+export enum BattlePlayerStatus {
+  JOINED = 'JOINED',
+  READY = 'READY',
+  PLAYING = 'PLAYING',
+  DISCONNECTED = 'DISCONNECTED',
+  LEFT = 'LEFT',
+  FINISHED = 'FINISHED',
 }
 
 export enum MetricType {

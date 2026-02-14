@@ -18,6 +18,16 @@ enum UserStatus {
   INACTIVE
   SUSPENDED
   PENDING
+  IN_BATTLE
+}
+
+enum BattlePlayerStatus {
+  JOINED
+  READY
+  PLAYING
+  DISCONNECTED
+  LEFT
+  FINISHED
 }
 
 enum BattleStatus {
@@ -110,7 +120,10 @@ model BattlePlayer {
   userId    String
   user      User   @relation(fields: [userId], references: [id])
 
+  status BattlePlayerStatus @default(JOINED)
   slot Int // 1 -> 4 Player position
+  joinedAt DateTime @default(now())
+  finishedAt DateTime?
 
   // Snapshot at match time
   eloSnapshot Int

@@ -62,8 +62,10 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     this.running = true;
 
     try {
+      // start matchmaking engine tick
       const matches = this.engine.match();
 
+      // match found, emit event for battle creation
       for (const match of matches) {
         this.eventEmitter.emit(EVENTS.MATCH_FOUND, new MatchFoundEvent(match));
         this.logger.log(`Match event emitted: ${match.matchId} `);
