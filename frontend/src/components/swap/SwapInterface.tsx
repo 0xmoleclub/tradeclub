@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { RefreshCw, Settings, ChevronDown, ArrowDown, ArrowRightLeft, Zap, CheckCircle2 } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 
 export const SwapInterface = () => {
   const [sellAmount, setSellAmount] = useState("");
@@ -136,10 +137,9 @@ export const SwapInterface = () => {
         </div>
 
         {/* Action Button */}
-        <button className="w-full mt-8 py-4 bg-white text-black font-black text-sm uppercase tracking-[0.2em] rounded-xl hover:bg-gray-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.2)] active:scale-[0.98] group overflow-hidden relative">
-          <span className="relative z-10 flex items-center justify-center gap-2">Connect Wallet</span>
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-300/50 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 ease-in-out skew-x-12" />
-        </button>
+        <div className="mt-8 flex justify-center">
+          <ConnectWalletButton variant="inline" />
+        </div>
       </div>
     </GlassPanel>
   );

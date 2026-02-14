@@ -10,6 +10,7 @@ import { OrderBook } from "@/components/perpetual/OrderBook";
 import { TradeHistory } from "@/components/perpetual/TradeHistory";
 import { PlaceOrder } from "@/components/perpetual/PlaceOrder";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 
 export default function PerpetualPage() {
   // --- Market Selection ---
@@ -78,9 +79,7 @@ export default function PerpetualPage() {
           title="Perpetual Trading"
           backLabel="Back to Floor"
           showNetworkStatus
-          rightContent={
-            <button className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-colors">Connect Wallet</button>
-          }
+          rightContent={<ConnectWalletButton variant="page" />}
           className="-mx-2 mb-2 w-[calc(100%+16px)]"
         />
 
