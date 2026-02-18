@@ -44,7 +44,8 @@ const intervalToMs = (interval: string): number => {
   return map[interval] || 15 * 60 * 1000;
 };
 
-const API_URL = 'https://api.hyperliquid.xyz/info';
+const API_URL = 'https://api.hyperliquid-testnet.xyz/info';
+const WS_URL = 'wss://api.hyperliquid-testnet.xyz/ws';
 
 interface UseCandlesReturn {
   candles: Candle[];
@@ -65,6 +66,8 @@ export const useHyperliquidCandles = (
   const wsRef = useRef<WebSocket | null>(null);
   const candlesRef = useRef<Candle[]>([]);
   const isInitialLoadRef = useRef(true);
+  const retryCountRef = useRef(0);
+  const maxRetries = 3;
 
   // Keep ref in sync
   useEffect(() => {
@@ -102,6 +105,21 @@ export const useHyperliquidCandles = (
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody)
         });
+
+        if (response.status === 429) {
+          if (retryCountRef.current < maxRetries) {
+            retryCountRef.current++;
+            const delay = Math.pow(2, retryCountRef.current) * 1000;
+            console.log(`[Candles] Rate limited, retrying in ${delay}ms...`);
+            setTimeout(fetchCandles, delay);
+            return;
+          }
+          console.error('[Candles] Rate limited after retries');
+          setIsLoading(false);
+          return;
+        }
+
+        retryCountRef.current = 0;
 
         if (!response.ok) {
           const text = await response.text();
@@ -214,7 +232,7 @@ export const useHyperliquidCandles = (
   // WebSocket for live updates
   useEffect(() => {
     const coin = symbolToCoin(symbol);
-    const ws = new WebSocket('wss://api.hyperliquid.xyz/ws');
+    const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {

@@ -42,8 +42,8 @@ interface MarketHeaderProps {
   onMarketChange: (market: string) => void;
 }
 
-const API_URL = 'https://api.hyperliquid.xyz/info';
-const WS_URL = 'wss://api.hyperliquid.xyz/ws';
+const API_URL = 'https://api.hyperliquid-testnet.xyz/info';
+const WS_URL = 'wss://api.hyperliquid-testnet.xyz/ws';
 
 export const MarketHeader = ({ selectedMarket, onMarketChange }: MarketHeaderProps) => {
   const [markets, setMarkets] = useState<MarketData[]>([]);
@@ -65,6 +65,11 @@ export const MarketHeader = ({ selectedMarket, onMarketChange }: MarketHeaderPro
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
       });
+
+      if (response.status === 429) {
+        console.log('[MarketHeader] Rate limited, skipping this update');
+        return;
+      }
 
       if (!response.ok) throw new Error('Failed to fetch market data');
 
@@ -102,70 +107,80 @@ export const MarketHeader = ({ selectedMarket, onMarketChange }: MarketHeaderPro
     }
   }, []);
 
-  // WebSocket for real-time updates
+  // WebSocket for real-time updates with fallback
   useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectAttempts = 0;
+    const maxReconnects = 3;
+
     const connectWebSocket = () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.close();
+      if (reconnectAttempts >= maxReconnects) {
+        console.log('[MarketHeader] Max reconnection attempts reached, using REST only');
+        return;
       }
 
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
+      try {
+        ws = new WebSocket(WS_URL);
+        wsRef.current = ws;
 
-      ws.onopen = () => {
-        console.log('[MarketHeader] WebSocket connected');
-        // Subscribe to all market updates
-        ws.send(JSON.stringify({
-          method: 'subscribe',
-          subscription: { type: 'allMids' }
-        }));
-      };
+        ws.onopen = () => {
+          console.log('[MarketHeader] WebSocket connected');
+          reconnectAttempts = 0;
+          ws?.send(JSON.stringify({
+            method: 'subscribe',
+            subscription: { type: 'allMids' }
+          }));
+        };
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.channel === 'allMids' && data.data) {
-            const mids = data.data.mids || {};
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
             
-            setMarkets(prev => prev.map(m => {
-              const newMid = mids[m.coin];
-              if (newMid) {
-                const midPrice = parseFloat(newMid);
-                // Update mark price slightly based on mid
-                return { ...m, midPrice, markPrice: midPrice };
-              }
-              return m;
-            }));
+            if (data.channel === 'allMids' && data.data) {
+              const mids = data.data.mids || {};
+              
+              setMarkets(prev => prev.map(m => {
+                const newMid = mids[m.coin];
+                if (newMid) {
+                  const midPrice = parseFloat(newMid);
+                  return { ...m, midPrice, markPrice: midPrice };
+                }
+                return m;
+              }));
+            }
+          } catch (err) {
+            console.error('[MarketHeader] WS parse error:', err);
           }
-        } catch (err) {
-          console.error('[MarketHeader] WS parse error:', err);
-        }
-      };
+        };
 
-      ws.onerror = (err) => {
-        console.error('[MarketHeader] WebSocket error:', err);
-      };
+        ws.onerror = (err) => {
+          console.error('[MarketHeader] WebSocket error:', err);
+        };
 
-      ws.onclose = () => {
-        // Reconnect after 5 seconds
-        setTimeout(connectWebSocket, 5000);
-      };
+        ws.onclose = () => {
+          reconnectAttempts++;
+          if (reconnectAttempts < maxReconnects) {
+            setTimeout(connectWebSocket, 3000 * reconnectAttempts);
+          }
+        };
+      } catch (err) {
+        console.error('[MarketHeader] Failed to create WebSocket:', err);
+      }
     };
 
     // Initial fetch
     fetchMarketData();
     
-    // Poll for updates every 10 seconds
+    // Poll for updates every 10 seconds (primary data source)
     const interval = setInterval(fetchMarketData, 10000);
     
-    // Connect WebSocket
+    // Try WebSocket as enhancement
     connectWebSocket();
 
     return () => {
       clearInterval(interval);
-      if (wsRef.current) {
-        wsRef.current.close();
+      if (ws) {
+        ws.close();
       }
     };
   }, [fetchMarketData]);

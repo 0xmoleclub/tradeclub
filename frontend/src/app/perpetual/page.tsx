@@ -9,6 +9,7 @@ import { MarketHeader } from "@/components/perpetual/MarketHeader";
 import { OrderBook } from "@/components/perpetual/OrderBook";
 import { TradeHistory } from "@/components/perpetual/TradeHistory";
 import { PlaceOrder } from "@/components/perpetual/PlaceOrder";
+import { TradingPanel } from "@/components/perpetual/TradingPanel";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 
@@ -127,9 +128,9 @@ export default function PerpetualPage() {
               <div className="w-16 h-[2px] bg-white/20 rounded-full" />
             </div>
 
-            {/* Bottom Row (History) */}
+            {/* Bottom Row (Trading Panel with Positions, Orders, Fills, etc) */}
             <GlassPanel className="rounded-bl-2xl" style={{ height: `${bottomRowHeight}%` }}>
-              <TradeHistory symbol={selectedMarket} />
+              <TradingPanel symbol={selectedMarket} />
             </GlassPanel>
           </div>
 

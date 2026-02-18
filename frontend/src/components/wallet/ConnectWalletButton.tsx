@@ -19,7 +19,13 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
   const [showDropdown, setShowDropdown] = useState(false);
   const [showWalletList, setShowWalletList] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const truncatedAddress = address
     ? `${address.slice(0, 6)}...${address.slice(-4)}`
@@ -50,6 +56,34 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     disconnect();
     setShowDropdown(false);
   }, [disconnect]);
+
+  // Prevent hydration mismatch - show placeholder during SSR
+  if (!mounted) {
+    return (
+      <div className="relative">
+        <button
+          disabled
+          className={`
+            group relative overflow-hidden
+            ${variant === "navbar" ? "skew-x-[-15deg] transform" : ""}
+          `}
+        >
+          <div className="absolute -inset-[1px] bg-gradient-to-r from-gray-600 via-gray-500 to-gray-600 opacity-30 blur-[1px]" />
+          <div
+            className={`
+              relative flex items-center gap-3 border border-gray-600/30
+              ${variant === "navbar" ? "px-6 py-2.5 bg-black" : "px-5 py-2 rounded-lg bg-black/80"}
+            `}
+          >
+            <div className="w-4 h-4 border-2 border-gray-600/30 border-t-gray-500 rounded-full animate-spin" />
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-500">
+              Loading...
+            </span>
+          </div>
+        </button>
+      </div>
+    );
+  }
 
   // --- CONNECTED STATE ---
   if (isConnected && address) {
