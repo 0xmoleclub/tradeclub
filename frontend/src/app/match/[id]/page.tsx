@@ -9,6 +9,7 @@ import { DuelChart } from "@/components/match/DuelChart";
 import { BettingPanel } from "@/components/match/BettingPanel";
 import { ChatPanel } from "@/components/match/ChatPanel";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 
 export default function MatchPage() {
   const [rightPanelWidth, setRightPanelWidth] = useState(30); // %
@@ -71,9 +72,7 @@ export default function MatchPage() {
               <Users size={14} className="text-gray-400" />
               <span className="text-[10px] font-mono font-bold">14,204 Spec</span>
             </div>
-            <button className="px-6 py-2 bg-gradient-to-r from-magenta-600 to-purple-600 rounded text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-[0_0_20px_rgba(219,39,119,0.3)]">
-              Connect Wallet
-            </button>
+            <ConnectWalletButton variant="page" />
           </div>
         }
       />

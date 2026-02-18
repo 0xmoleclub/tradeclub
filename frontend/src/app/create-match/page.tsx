@@ -6,6 +6,7 @@ import { CreateMatch } from "@/components/create-match/CreateMatch";
 import { LaserBackground } from "@/components/ui/effects/LaserBackground";
 import { Matching } from "@/components/create-match/Matching";
 import { useMatching } from "@/hooks/useMatching";
+import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 
 export default function CreateMatchPage() {
     const { matching, setMatching, players, addPlayer, removePlayer } =
@@ -22,11 +23,7 @@ export default function CreateMatchPage() {
                 title="Create a New Match"
                 backUrl="/"
                 showNetworkStatus
-                rightContent={
-                    <button className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-colors">
-                        Connect Wallet
-                    </button>
-                }
+                rightContent={<ConnectWalletButton variant="page" />}
             />
 
             {/* MAIN CONTENT */}
