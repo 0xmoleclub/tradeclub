@@ -59,6 +59,31 @@ body::before {
   background-size: 40px 40px;
 }
 
+/* --- WALLET ANIMATIONS --- */
+
+@keyframes wallet-border-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.wallet-glow-pulse {
+  animation: wallet-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes wallet-glow {
+  0% { opacity: 0.4; }
+  100% { opacity: 0.8; }
+}
+
+.wallet-glow-connected {
+  animation: wallet-glow-green 2s ease-in-out infinite alternate;
+}
+
+@keyframes wallet-glow-green {
+  0% { opacity: 0.3; }
+  100% { opacity: 0.6; }
+}
+
 /* --- ANIMATIONS --- */
 
 @keyframes equalizer {
