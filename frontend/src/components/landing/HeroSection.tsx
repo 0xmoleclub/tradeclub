@@ -44,7 +44,10 @@ export const HeroSection = () => {
         </h1>
 
         <p className="mt-8 text-xl text-gray-400 max-w-2xl mx-auto tracking-wide font-mono border-l-4 border-neon pl-6 text-left md:text-center md:border-l-0 uppercase relative z-10 text-glow-neon">
-          Welcome to the cage. Where markets bleed, and every trade is a fight.
+          What the first rule of tradeclub ? 
+        </p>
+        <p className="mt-8 text-xl text-gray-400 max-w-2xl mx-auto tracking-wide font-mono border-l-4 border-neon pl-6 text-left md:text-center md:border-l-0 uppercase relative z-10 text-glow-neon">
+          we don't talk about tradeclub
         </p>
       </div>
 

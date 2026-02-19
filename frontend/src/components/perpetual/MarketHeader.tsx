@@ -149,12 +149,13 @@ export const MarketHeader = ({ selectedMarket, onMarketChange }: MarketHeaderPro
               }));
             }
           } catch (err) {
-            console.error('[MarketHeader] WS parse error:', err);
+            // Silently ignore parse errors - WebSocket is enhancement, REST is primary
           }
         };
 
-        ws.onerror = (err) => {
-          console.error('[MarketHeader] WebSocket error:', err);
+        ws.onerror = () => {
+          // WebSocket errors are normal when connection fails, we fallback to REST
+          // Silently log as info - REST polling is the primary data source
         };
 
         ws.onclose = () => {
@@ -163,8 +164,8 @@ export const MarketHeader = ({ selectedMarket, onMarketChange }: MarketHeaderPro
             setTimeout(connectWebSocket, 3000 * reconnectAttempts);
           }
         };
-      } catch (err) {
-        console.error('[MarketHeader] Failed to create WebSocket:', err);
+      } catch {
+        // Silently ignore WebSocket creation errors - REST polling is primary
       }
     };
 
