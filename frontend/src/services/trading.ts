@@ -1,6 +1,6 @@
 'use client';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:3002';
 
 interface ApiError extends Error {
   status?: number;
@@ -22,16 +22,17 @@ async function fetchWithAuth(endpoint: string, options: RequestInit = {}): Promi
     },
   });
 
-  const data = await response.json().catch(() => null);
+  const result = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const error = new Error(data?.message || `Request failed: ${response.status}`) as ApiError;
+    const error = new Error(result?.message || `Request failed: ${response.status}`) as ApiError;
     error.status = response.status;
-    error.data = data;
+    error.data = result;
     throw error;
   }
 
-  return data;
+  // Backend wraps response in { success, data, timestamp, path }
+  return result?.data || result;
 }
 
 // ==================== AUTH ====================
@@ -55,7 +56,9 @@ export const authApi = {
   getNonce: async (walletAddress: string): Promise<AuthNonce> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/auth/nonce?walletAddress=${walletAddress}`);
     if (!response.ok) throw new Error('Failed to get nonce');
-    return response.json();
+    const result = await response.json();
+    // Backend wraps response in { success, data, timestamp, path }
+    return result.data || result;
   },
 
   login: async (walletAddress: string, signature: string): Promise<AuthResponse> => {
@@ -65,7 +68,9 @@ export const authApi = {
       body: JSON.stringify({ walletAddress, signature }),
     });
     if (!response.ok) throw new Error('Login failed');
-    const data = await response.json();
+    const result = await response.json();
+    // Backend wraps response in { success, data, timestamp, path }
+    const data = result.data || result;
     // Store token
     localStorage.setItem('tradeclub_token', data.accessToken);
     return data;
@@ -95,11 +100,22 @@ export interface AgentWallet {
 
 export const agentWalletApi = {
   create: async (): Promise<AgentWallet> => {
-    return fetchWithAuth('/hypercore/agent', { method: 'POST' });
+    const response = await fetchWithAuth('/hypercore/agent', { method: 'POST' });
+    return {
+      agentAddress: response.agentAddress,
+      createdAt: new Date().toISOString(),
+    };
   },
 
   get: async (): Promise<AgentWallet | null> => {
-    return fetchWithAuth('/hypercore/agent');
+    const response = await fetchWithAuth('/hypercore/agent');
+    if (!response.hasWallet) {
+      return null;
+    }
+    return {
+      agentAddress: response.agentAddress,
+      createdAt: response.createdAt,
+    };
   },
 };
 

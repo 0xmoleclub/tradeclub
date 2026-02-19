@@ -22,6 +22,7 @@ import {
   useHyperliquidTwap,
   useHyperliquidFunding,
   useHyperliquidOrderHistory,
+  useAuth,
   type Position,
   type OpenOrder,
   type UserFill,
@@ -29,6 +30,8 @@ import {
   type FundingPayment,
   type HistoricalOrder,
 } from "@/hooks";
+import { tradingApi } from "@/services/trading";
+import { RequireWallet } from "@/components/auth";
 
 interface TradingPanelProps {
   symbol?: string;
@@ -90,19 +93,205 @@ const formatPercent = (value: number | string) => {
   return `${num >= 0 ? "+" : ""}${num.toFixed(2)}%`;
 };
 
+// Empty state component for no data
+const EmptyState = ({ icon: Icon, title, subtitle }: { icon: any, title: string, subtitle: string }) => (
+  <div className="h-48 flex flex-col items-center justify-center text-gray-600 gap-2">
+    <Icon className="w-8 h-8 opacity-30" />
+    <span className="text-xs">{title}</span>
+    <span className="text-[10px] text-gray-700">{subtitle}</span>
+  </div>
+);
+
+// Connect wallet prompt component
+const ConnectWalletPrompt = ({ message = "Connect your wallet to view personal trading data" }: { message?: string }) => (
+  <div className="h-48 flex flex-col items-center justify-center text-gray-600 gap-3">
+    <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
+      <Wallet className="w-6 h-6 text-gray-500" />
+    </div>
+    <div className="text-center">
+      <p className="text-sm font-bold text-white">Connect Wallet</p>
+      <p className="text-xs text-gray-500 mt-1 max-w-[200px]">{message}</p>
+    </div>
+  </div>
+);
+
+// ==================== CLOSE POSITION MODAL ====================
+interface ClosePositionModalProps {
+  position: Position;
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const ClosePositionModal = ({ position, isOpen, onClose, onSuccess }: ClosePositionModalProps) => {
+  const { signIn, canTrade } = useAuth();
+  const [closeType, setCloseType] = useState<"market" | "limit">("market");
+  const [price, setPrice] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<{type: "loading" | "success" | "error", message: string} | null>(null);
+  
+  const size = Math.abs(parseFloat(position.szi)).toString();
+  const isLong = parseFloat(position.szi) > 0;
+
+  const handleClose = async () => {
+    if (!canTrade) {
+      setStatus({ type: "loading", message: "Authenticating..." });
+      try {
+        await signIn();
+      } catch (err: any) {
+        setStatus({ type: "error", message: err.message || "Authentication failed" });
+        return;
+      }
+    }
+
+    if (closeType === "limit" && (!price || parseFloat(price) <= 0)) {
+      setStatus({ type: "error", message: "Enter valid price" });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatus({ type: "loading", message: "Closing position..." });
+
+    try {
+      let response;
+      if (closeType === "market") {
+        response = await tradingApi.closeMarketOrder({
+          coin: position.coin,
+          size,
+        });
+      } else {
+        response = await tradingApi.closeLimitOrder({
+          coin: position.coin,
+          size,
+          price,
+        });
+      }
+
+      if (response?.success) {
+        setStatus({ type: "success", message: "Position closed!" });
+        setTimeout(() => {
+          onSuccess();
+          onClose();
+        }, 1500);
+      }
+    } catch (err: any) {
+      setStatus({ type: "error", message: err.message || "Close failed" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <h3 className="text-sm font-bold text-white">Close Position</h3>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Position Summary */}
+          <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs text-gray-500">{position.coin}</span>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded ${isLong ? "bg-cyan-500/20 text-cyan-400" : "bg-magenta-500/20 text-magenta-400"}`}>
+                {isLong ? "LONG" : "SHORT"}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Size</span>
+              <span className="font-mono text-white">{size} {position.coin}</span>
+            </div>
+          </div>
+
+          {/* Close Type */}
+          <div className="flex p-1 bg-black/50 rounded-lg border border-white/10">
+            <button
+              onClick={() => setCloseType("market")}
+              className={`flex-1 py-2 text-xs font-bold uppercase rounded transition-all ${
+                closeType === "market" ? "bg-white/10 text-white" : "text-gray-500 hover:text-white"
+              }`}
+            >
+              Market
+            </button>
+            <button
+              onClick={() => setCloseType("limit")}
+              className={`flex-1 py-2 text-xs font-bold uppercase rounded transition-all ${
+                closeType === "limit" ? "bg-white/10 text-white" : "text-gray-500 hover:text-white"
+              }`}
+            >
+              Limit
+            </button>
+          </div>
+
+          {/* Price Input (Limit only) */}
+          {closeType === "limit" && (
+            <div className="space-y-2">
+              <span className="text-[10px] text-gray-500 uppercase font-mono">Close Price</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-black border border-white/10 rounded-lg px-4 py-3 text-sm font-mono text-white focus:border-cyan-500 focus:outline-none"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600">USD</span>
+              </div>
+            </div>
+          )}
+
+          {/* Status */}
+          {status && (
+            <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+              status.type === "loading" ? "bg-blue-500/20 text-blue-400" :
+              status.type === "success" ? "bg-green-500/20 text-green-400" :
+              "bg-red-500/20 text-red-400"
+            }`}>
+              {status.type === "loading" && <Loader2 className="w-3 h-3 animate-spin" />}
+              {status.message}
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-white/10 space-y-2">
+          <button
+            onClick={handleClose}
+            disabled={isSubmitting}
+            className="w-full py-3 bg-orange-600 text-white font-bold uppercase text-xs rounded-lg hover:bg-orange-500 transition-colors disabled:opacity-50"
+          >
+            {isSubmitting ? "Closing..." : `Close ${closeType === "market" ? "Market" : "Limit"}`}
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full py-3 bg-transparent text-gray-500 font-bold uppercase text-xs rounded-lg hover:text-white"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ==================== POSITIONS TAB ====================
 const PositionsTab = ({ coin }: { coin: string }) => {
   const { isConnected } = useAccount();
-  const { positions, account, isLoading, error } = useHyperliquidAccount();
+  const { positions, account, isLoading, error, refetch } = useHyperliquidAccount();
   const [mounted, setMounted] = useState(false);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
   
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => setMounted(true), []);
   
-  const filteredPositions = coin 
-    ? positions.filter((p) => p.coin === coin)
-    : positions;
+  const handleCloseClick = (pos: Position) => {
+    setSelectedPosition(pos);
+    setCloseModalOpen(true);
+  };
 
   if (!mounted) {
     return (
@@ -114,13 +303,10 @@ const PositionsTab = ({ coin }: { coin: string }) => {
   }
 
   if (!isConnected) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-500 gap-2">
-        <Wallet className="w-8 h-8 opacity-50" />
-        <span className="text-xs">Connect wallet to view positions</span>
-      </div>
-    );
+    return <ConnectWalletPrompt message="Connect your wallet to view positions" />;
   }
+
+  const filteredPositions = coin ? positions.filter((p) => p.coin === coin) : positions;
 
   if (isLoading && positions.length === 0) {
     return (
@@ -141,117 +327,107 @@ const PositionsTab = ({ coin }: { coin: string }) => {
   }
 
   if (filteredPositions.length === 0) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-600 gap-2">
-        <Layers className="w-8 h-8 opacity-30" />
-        <span className="text-xs">No open positions</span>
-        <span className="text-[10px] text-gray-700">Start trading to open a position</span>
-      </div>
-    );
+    return <EmptyState icon={Layers} title="No open positions" subtitle="Start trading to open a position" />;
   }
 
   return (
-    <div className="space-y-3">
-      {account && (
-        <div className="grid grid-cols-3 gap-2 p-3 bg-white/5 rounded-lg border border-white/10">
-          <div>
-            <div className="text-[10px] text-gray-500 uppercase">Account Value</div>
-            <div className="text-sm font-mono text-white">
-              {formatValue(account.marginSummary.accountValue)}
+    <>
+      <div className="space-y-3">
+        {account && (
+          <div className="grid grid-cols-3 gap-2 p-3 bg-white/5 rounded-lg border border-white/10">
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase">Account Value</div>
+              <div className="text-sm font-mono text-white">{formatValue(account.marginSummary.accountValue)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase">Margin Used</div>
+              <div className="text-sm font-mono text-yellow-400">{formatValue(account.marginSummary.totalMarginUsed)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] text-gray-500 uppercase">Available</div>
+              <div className="text-sm font-mono text-cyan-400">{formatValue(account.marginSummary.totalRawUsd)}</div>
             </div>
           </div>
-          <div>
-            <div className="text-[10px] text-gray-500 uppercase">Margin Used</div>
-            <div className="text-sm font-mono text-yellow-400">
-              {formatValue(account.marginSummary.totalMarginUsed)}
+        )}
+
+        {filteredPositions.map((pos) => {
+          const size = parseFloat(pos.szi);
+          const entryPx = parseFloat(pos.entryPx);
+          const positionValue = parseFloat(pos.positionValue);
+          const unrealizedPnl = parseFloat(pos.unrealizedPnl);
+          const leverage = parseFloat(pos.leverage);
+          const liquidationPx = parseFloat(pos.liquidationPx);
+          const isLong = size > 0;
+          const absSize = Math.abs(size);
+          const pnlPercent = entryPx > 0 ? (unrealizedPnl / (absSize * entryPx)) * 100 : 0;
+
+          return (
+            <div key={pos.coin} className="p-3 bg-white/5 rounded-lg border border-white/10 hover:border-white/20 transition-colors">
+              <div className="flex justify-between items-start mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-white">{pos.coin}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded ${isLong ? "bg-cyan-500/20 text-cyan-400" : "bg-magenta-500/20 text-magenta-400"}`}>
+                    {isLong ? "LONG" : "SHORT"} {leverage.toFixed(0)}x
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className={`text-sm font-mono font-bold ${unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {unrealizedPnl >= 0 ? "+" : ""}{formatValue(unrealizedPnl)}
+                    <span className="text-[10px] ml-1 opacity-70">({formatPercent(pnlPercent)})</span>
+                  </div>
+                  <button
+                    onClick={() => handleCloseClick(pos)}
+                    className="px-3 py-1 bg-orange-600/20 text-orange-400 border border-orange-600/30 rounded text-[10px] font-bold uppercase hover:bg-orange-600/30 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Size</span>
+                  <span className="font-mono text-white">{formatSize(absSize)} {pos.coin}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Position Value</span>
+                  <span className="font-mono text-white">{formatValue(positionValue)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Entry Price</span>
+                  <span className="font-mono text-white">{formatPrice(entryPx)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Liquidation</span>
+                  <span className={`font-mono ${liquidationPx > 0 ? "text-red-400" : "text-gray-600"}`}>
+                    {liquidationPx > 0 ? formatPrice(liquidationPx) : "-"}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-          <div>
-            <div className="text-[10px] text-gray-500 uppercase">Available</div>
-            <div className="text-sm font-mono text-cyan-400">
-              {formatValue(account.marginSummary.totalRawUsd)}
-            </div>
-          </div>
-        </div>
+          );
+        })}
+      </div>
+
+      {/* Close Position Modal */}
+      {selectedPosition && (
+        <ClosePositionModal
+          position={selectedPosition}
+          isOpen={closeModalOpen}
+          onClose={() => setCloseModalOpen(false)}
+          onSuccess={refetch}
+        />
       )}
-
-      {filteredPositions.map((pos) => {
-        const size = parseFloat(pos.szi);
-        const entryPx = parseFloat(pos.entryPx);
-        const positionValue = parseFloat(pos.positionValue);
-        const unrealizedPnl = parseFloat(pos.unrealizedPnl);
-        const leverage = parseFloat(pos.leverage);
-        const liquidationPx = parseFloat(pos.liquidationPx);
-        const isLong = size > 0;
-        const absSize = Math.abs(size);
-        const pnlPercent = entryPx > 0 ? (unrealizedPnl / (absSize * entryPx)) * 100 : 0;
-
-        return (
-          <div 
-            key={pos.coin} 
-            className="p-3 bg-white/5 rounded-lg border border-white/10 hover:border-white/20 transition-colors"
-          >
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white">{pos.coin}</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded ${
-                  isLong ? "bg-cyan-500/20 text-cyan-400" : "bg-magenta-500/20 text-magenta-400"
-                }`}>
-                  {isLong ? "LONG" : "SHORT"} {leverage.toFixed(0)}x
-                </span>
-              </div>
-              <div className={`text-sm font-mono font-bold ${
-                unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"
-              }`}>
-                {unrealizedPnl >= 0 ? "+" : ""}{formatValue(unrealizedPnl)}
-                <span className="text-[10px] ml-1 opacity-70">
-                  ({formatPercent(pnlPercent)})
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Size</span>
-                <span className="font-mono text-white">{formatSize(absSize)} {pos.coin}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Position Value</span>
-                <span className="font-mono text-white">{formatValue(positionValue)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Entry Price</span>
-                <span className="font-mono text-white">{formatPrice(entryPx)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Liquidation</span>
-                <span className={`font-mono ${
-                  liquidationPx > 0 ? "text-red-400" : "text-gray-600"
-                }`}>
-                  {liquidationPx > 0 ? formatPrice(liquidationPx) : "-"}
-                </span>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    </>
   );
 };
 
 // ==================== OPEN ORDERS TAB ====================
 const OpenOrdersTab = ({ coin }: { coin: string }) => {
   const { isConnected } = useAccount();
-  const { orders, isLoading, error } = useHyperliquidOrders();
+  const { orders, isLoading } = useHyperliquidOrders();
   const [mounted, setMounted] = useState(false);
   
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const filteredOrders = coin
-    ? orders.filter((o) => o.coin === coin)
-    : orders;
+  useEffect(() => setMounted(true), []);
 
   if (!mounted) {
     return (
@@ -263,13 +439,10 @@ const OpenOrdersTab = ({ coin }: { coin: string }) => {
   }
 
   if (!isConnected) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-500 gap-2">
-        <Wallet className="w-8 h-8 opacity-50" />
-        <span className="text-xs">Connect wallet to view orders</span>
-      </div>
-    );
+    return <ConnectWalletPrompt message="Connect your wallet to view open orders" />;
   }
+
+  const filteredOrders = coin ? orders.filter((o) => o.coin === coin) : orders;
 
   if (isLoading && orders.length === 0) {
     return (
@@ -281,13 +454,7 @@ const OpenOrdersTab = ({ coin }: { coin: string }) => {
   }
 
   if (filteredOrders.length === 0) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-600 gap-2">
-        <Clock className="w-8 h-8 opacity-30" />
-        <span className="text-xs">No open orders</span>
-        <span className="text-[10px] text-gray-700">Your active orders will appear here</span>
-      </div>
-    );
+    return <EmptyState icon={Clock} title="No open orders" subtitle="Your active orders will appear here" />;
   }
 
   return (
@@ -318,15 +485,9 @@ const OpenOrdersTab = ({ coin }: { coin: string }) => {
                   {order.reduceOnly && " (Reduce)"}
                 </span>
               </td>
-              <td className="py-2 px-2 text-right font-mono text-white">
-                {formatPrice(order.limitPx)}
-              </td>
-              <td className="py-2 px-2 text-right font-mono text-white">
-                {formatSize(order.sz)}
-              </td>
-              <td className="py-2 px-2 text-right text-gray-500">
-                {formatTime(order.timestamp)}
-              </td>
+              <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(order.limitPx)}</td>
+              <td className="py-2 px-2 text-right font-mono text-white">{formatSize(order.sz)}</td>
+              <td className="py-2 px-2 text-right text-gray-500">{formatTime(order.timestamp)}</td>
             </tr>
           ))}
         </tbody>
@@ -338,16 +499,10 @@ const OpenOrdersTab = ({ coin }: { coin: string }) => {
 // ==================== TWAP TAB ====================
 const TwapTab = ({ coin }: { coin: string }) => {
   const { isConnected } = useAccount();
-  const { twapFills, isLoading, error } = useHyperliquidTwap();
+  const { twapFills, isLoading } = useHyperliquidTwap();
   const [mounted, setMounted] = useState(false);
   
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const filteredTwapFills = coin
-    ? twapFills.filter((t) => t.fill.coin === coin)
-    : twapFills;
+  useEffect(() => setMounted(true), []);
 
   if (!mounted) {
     return (
@@ -359,13 +514,10 @@ const TwapTab = ({ coin }: { coin: string }) => {
   }
 
   if (!isConnected) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-500 gap-2">
-        <Wallet className="w-8 h-8 opacity-50" />
-        <span className="text-xs">Connect wallet to view TWAP fills</span>
-      </div>
-    );
+    return <ConnectWalletPrompt message="Connect your wallet to view TWAP fills" />;
   }
+
+  const filteredTwapFills = coin ? twapFills.filter((t) => t.fill.coin === coin) : twapFills;
 
   if (isLoading && twapFills.length === 0) {
     return (
@@ -376,13 +528,7 @@ const TwapTab = ({ coin }: { coin: string }) => {
   }
 
   if (filteredTwapFills.length === 0) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-600 gap-2">
-        <Zap className="w-8 h-8 opacity-30" />
-        <span className="text-xs">No TWAP fills</span>
-        <span className="text-[10px] text-gray-700">TWAP order slices will appear here</span>
-      </div>
-    );
+    return <EmptyState icon={Zap} title="No TWAP fills" subtitle="TWAP order slices will appear here" />;
   }
 
   return (
@@ -408,15 +554,9 @@ const TwapTab = ({ coin }: { coin: string }) => {
                   {twap.fill.side === "B" ? "Buy" : "Sell"}
                 </span>
               </td>
-              <td className="py-2 px-2 text-right font-mono text-white">
-                {formatPrice(twap.fill.px)}
-              </td>
-              <td className="py-2 px-2 text-right font-mono text-white">
-                {formatSize(twap.fill.sz)}
-              </td>
-              <td className="py-2 px-2 text-right font-mono text-gray-400">
-                #{twap.twapId}
-              </td>
+              <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(twap.fill.px)}</td>
+              <td className="py-2 px-2 text-right font-mono text-white">{formatSize(twap.fill.sz)}</td>
+              <td className="py-2 px-2 text-right font-mono text-gray-400">#{twap.twapId}</td>
             </tr>
           ))}
         </tbody>
@@ -428,12 +568,10 @@ const TwapTab = ({ coin }: { coin: string }) => {
 // ==================== FILLS TAB (ALL TRADES) ====================
 const FillsTab = () => {
   const { isConnected } = useAccount();
-  const { fills, isLoading, error } = useHyperliquidFills();
+  const { fills, isLoading } = useHyperliquidFills();
   const [mounted, setMounted] = useState(false);
   
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => setMounted(true), []);
 
   if (!mounted) {
     return (
@@ -445,12 +583,7 @@ const FillsTab = () => {
   }
 
   if (!isConnected) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-500 gap-2">
-        <Wallet className="w-8 h-8 opacity-50" />
-        <span className="text-xs">Connect wallet to view fills</span>
-      </div>
-    );
+    return <ConnectWalletPrompt message="Connect your wallet to view trade history" />;
   }
 
   if (isLoading && fills.length === 0) {
@@ -462,13 +595,7 @@ const FillsTab = () => {
   }
 
   if (fills.length === 0) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-600 gap-2">
-        <Activity className="w-8 h-8 opacity-30" />
-        <span className="text-xs">No recent fills</span>
-        <span className="text-[10px] text-gray-700">Your trade history will appear here</span>
-      </div>
-    );
+    return <EmptyState icon={Activity} title="No recent fills" subtitle="Your trade history will appear here" />;
   }
 
   return (
@@ -498,12 +625,8 @@ const FillsTab = () => {
                     {isBuy ? "Buy" : "Sell"}
                   </span>
                 </td>
-                <td className="py-2 px-2 text-right font-mono text-white">
-                  {formatPrice(fill.px)}
-                </td>
-                <td className="py-2 px-2 text-right font-mono text-white">
-                  {formatSize(fill.sz)}
-                </td>
+                <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(fill.px)}</td>
+                <td className="py-2 px-2 text-right font-mono text-white">{formatSize(fill.sz)}</td>
                 <td className="py-2 px-2 text-right font-mono">
                   {pnl !== null ? (
                     <span className={pnl >= 0 ? "text-green-400" : "text-red-400"}>
@@ -523,17 +646,12 @@ const FillsTab = () => {
 };
 
 // ==================== FUNDING TAB ====================
-const FundingTab = ({ coin }: { coin: string }) => {
+const FundingTab = () => {
   const { isConnected } = useAccount();
-  const { fundingHistory, stats, isLoading, error } = useHyperliquidFunding();
+  const { fundingHistory, stats, isLoading } = useHyperliquidFunding();
   const [mounted, setMounted] = useState(false);
   
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Show all funding history (like Trade History), not filtered by coin
-  const filteredHistory = fundingHistory;
+  useEffect(() => setMounted(true), []);
 
   if (!mounted) {
     return (
@@ -545,12 +663,7 @@ const FundingTab = ({ coin }: { coin: string }) => {
   }
 
   if (!isConnected) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-500 gap-2">
-        <Wallet className="w-8 h-8 opacity-50" />
-        <span className="text-xs">Connect wallet to view funding</span>
-      </div>
-    );
+    return <ConnectWalletPrompt message="Connect your wallet to view funding payments" />;
   }
 
   if (isLoading && fundingHistory.length === 0) {
@@ -561,19 +674,12 @@ const FundingTab = ({ coin }: { coin: string }) => {
     );
   }
 
-  if (filteredHistory.length === 0) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-600 gap-2">
-        <Receipt className="w-8 h-8 opacity-30" />
-        <span className="text-xs">No funding payments</span>
-        <span className="text-[10px] text-gray-700">Funding occurs every 8 hours</span>
-      </div>
-    );
+  if (fundingHistory.length === 0) {
+    return <EmptyState icon={Receipt} title="No funding payments" subtitle="Funding occurs every 8 hours" />;
   }
 
   return (
     <div className="space-y-3">
-      {/* Funding Stats */}
       <div className="grid grid-cols-3 gap-2 p-3 bg-white/5 rounded-lg border border-white/10">
         <div>
           <div className="text-[10px] text-gray-500 uppercase">Total Paid</div>
@@ -591,7 +697,6 @@ const FundingTab = ({ coin }: { coin: string }) => {
         </div>
       </div>
 
-      {/* Funding History Table */}
       <div className="overflow-auto max-h-64">
         <table className="w-full text-[11px]">
           <thead className="text-gray-500 border-b border-white/10 sticky top-0 bg-[#0a0a0a]">
@@ -603,7 +708,7 @@ const FundingTab = ({ coin }: { coin: string }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredHistory.slice(0, 100).map((funding, idx) => (
+            {fundingHistory.slice(0, 100).map((funding, idx) => (
               <tr key={`${funding.hash}-${idx}`} className="border-b border-white/5 hover:bg-white/5">
                 <td className="py-2 px-2 text-gray-500">{formatDateTime(funding.time)}</td>
                 <td className="py-2 px-2 font-medium text-white">{funding.coin}</td>
@@ -627,16 +732,10 @@ const FundingTab = ({ coin }: { coin: string }) => {
 // ==================== ORDER HISTORY TAB ====================
 const OrderHistoryTab = ({ coin }: { coin: string }) => {
   const { isConnected } = useAccount();
-  const { orders, isLoading, error } = useHyperliquidOrderHistory();
+  const { orders, isLoading } = useHyperliquidOrderHistory();
   const [mounted, setMounted] = useState(false);
   
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const filteredOrders = coin
-    ? orders.filter(o => o.order.coin === coin)
-    : orders;
+  useEffect(() => setMounted(true), []);
 
   if (!mounted) {
     return (
@@ -648,12 +747,7 @@ const OrderHistoryTab = ({ coin }: { coin: string }) => {
   }
 
   if (!isConnected) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-500 gap-2">
-        <Wallet className="w-8 h-8 opacity-50" />
-        <span className="text-xs">Connect wallet to view order history</span>
-      </div>
-    );
+    return <ConnectWalletPrompt message="Connect your wallet to view order history" />;
   }
 
   if (isLoading && orders.length === 0) {
@@ -664,26 +758,16 @@ const OrderHistoryTab = ({ coin }: { coin: string }) => {
     );
   }
 
-  if (filteredOrders.length === 0) {
-    return (
-      <div className="h-48 flex flex-col items-center justify-center text-gray-600 gap-2">
-        <History className="w-8 h-8 opacity-30" />
-        <span className="text-xs">No order history</span>
-        <span className="text-[10px] text-gray-700">Your placed/canceled orders will appear here</span>
-      </div>
-    );
+  if (orders.length === 0) {
+    return <EmptyState icon={History} title="No order history" subtitle="Your placed/canceled orders will appear here" />;
   }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "filled":
-        return <CheckCircle2 className="w-3 h-3 text-green-400" />;
-      case "canceled":
-        return <X className="w-3 h-3 text-gray-400" />;
-      case "open":
-        return <Clock className="w-3 h-3 text-yellow-400" />;
-      default:
-        return <AlertCircle className="w-3 h-3 text-red-400" />;
+      case "filled": return <CheckCircle2 className="w-3 h-3 text-green-400" />;
+      case "canceled": return <X className="w-3 h-3 text-gray-400" />;
+      case "open": return <Clock className="w-3 h-3 text-yellow-400" />;
+      default: return <AlertCircle className="w-3 h-3 text-red-400" />;
     }
   };
 
@@ -701,7 +785,7 @@ const OrderHistoryTab = ({ coin }: { coin: string }) => {
           </tr>
         </thead>
         <tbody>
-          {filteredOrders.slice(0, 100).map((item, idx) => (
+          {orders.slice(0, 100).map((item, idx) => (
             <tr key={`${item.order.oid}-${idx}`} className="border-b border-white/5 hover:bg-white/5">
               <td className="py-2 px-2 text-gray-500">{formatTime(item.statusTimestamp)}</td>
               <td className="py-2 px-2 font-medium text-white">{item.order.coin}</td>
@@ -711,12 +795,8 @@ const OrderHistoryTab = ({ coin }: { coin: string }) => {
                   {item.order.reduceOnly && " (Reduce)"}
                 </span>
               </td>
-              <td className="py-2 px-2 text-right font-mono text-white">
-                {formatPrice(item.order.limitPx)}
-              </td>
-              <td className="py-2 px-2 text-right font-mono text-white">
-                {formatSize(item.order.origSz)}
-              </td>
+              <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(item.order.limitPx)}</td>
+              <td className="py-2 px-2 text-right font-mono text-white">{formatSize(item.order.origSz)}</td>
               <td className="py-2 px-2 text-center">
                 <div className="flex items-center justify-center gap-1">
                   {getStatusIcon(item.status)}
@@ -777,7 +857,7 @@ export const TradingPanel = ({ symbol = "BTC-PERP" }: TradingPanelProps) => {
         {activeTab === "orders" && <OpenOrdersTab coin={coin} />}
         {activeTab === "twap" && <TwapTab coin={coin} />}
         {activeTab === "fills" && <FillsTab />}
-        {activeTab === "funding" && <FundingTab coin={coin} />}
+        {activeTab === "funding" && <FundingTab />}
         {activeTab === "history" && <OrderHistoryTab coin={coin} />}
       </div>
     </div>

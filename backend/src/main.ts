@@ -24,10 +24,17 @@ async function bootstrap() {
   app.use(helmet());
   app.use(compression());
 
-  // CORS
+  // CORS - support multiple origins (comma-separated)
+  const corsOrigin = configService.get('app.corsOrigin', '*');
+  const allowedOrigins = corsOrigin === '*' 
+    ? true 
+    : corsOrigin.split(',').map((o: string) => o.trim());
+  
   app.enableCors({
-    origin: configService.get('app.corsOrigin', '*'),
+    origin: allowedOrigins,
     credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Authorization',
   });
 
   // Global prefix and versioning

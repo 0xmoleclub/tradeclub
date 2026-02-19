@@ -1,125 +1,131 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Loader2, Wallet, TrendingUp, TrendingDown, AlertCircle, CheckCircle2 } from "lucide-react";
-import { useAccount, useSignMessage } from "wagmi";
-import { tradingApi, authApi, agentWalletApi } from "@/services/trading";
+import React, { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { 
+  Loader2, 
+  Wallet, 
+  TrendingUp, 
+  TrendingDown, 
+  AlertCircle, 
+  CheckCircle2, 
+  Shield,
+  X,
+  Settings2
+} from "lucide-react";
+import { useAccount } from "wagmi";
+import { tradingApi, agentWalletApi } from "@/services/trading";
 import { useHyperliquidAccount } from "@/hooks/useHyperliquidAccount";
+import { useAuth } from "@/hooks";
 
 interface PlaceOrderProps {
   symbol?: string;
 }
 
-type OrderType = "limit" | "market" | "stop";
+type OrderType = "limit" | "market";
 type OrderSide = "long" | "short";
-type TabType = "open" | "close" | "tpsl";
 
 interface OrderStatus {
   type: "loading" | "success" | "error";
   message: string;
 }
 
+interface MarketMeta {
+  coin: string;
+  maxLeverage: number;
+  szDecimals: number;
+}
+
 export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
   const coin = symbol.split("-")[0];
-  const { address, isConnected } = useAccount();
-  const { signMessageAsync } = useSignMessage();
-  const { account, positions, refetch: refetchAccount } = useHyperliquidAccount();
+  const { isConnected: isWalletConnected, isSigning, signIn, canTrade } = useAuth();
+  const { account, refetch: refetchAccount } = useHyperliquidAccount();
 
-  // Prevent hydration mismatch
+  // Market metadata for leverage
+  const [marketMeta, setMarketMeta] = useState<MarketMeta | null>(null);
+  const [currentLeverage, setCurrentLeverage] = useState<number>(10);
+
+  // UI State
   const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Form state
-  const [activeTab, setActiveTab] = useState<TabType>("open");
   const [orderType, setOrderType] = useState<OrderType>("limit");
   const [side, setSide] = useState<OrderSide>("long");
+  const [showLeverageModal, setShowLeverageModal] = useState(false);
+  const [tempLeverage, setTempLeverage] = useState(10);
+
+  // Form inputs
   const [price, setPrice] = useState<string>("");
   const [size, setSize] = useState<string>("");
-  const [leverage, setLeverage] = useState<number>(10);
   const [markPrice, setMarkPrice] = useState<number>(0);
   
-  // TP/SL state
+  // TP/SL
   const [tpPrice, setTpPrice] = useState<string>("");
   const [slPrice, setSlPrice] = useState<string>("");
-  
-  // Auth state
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [hasAgentWallet, setHasAgentWallet] = useState(false);
+  const [showTpSl, setShowTpSl] = useState(false);
   
   // Order status
   const [orderStatus, setOrderStatus] = useState<OrderStatus | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Check auth status on mount
-  useEffect(() => {
-    setIsAuthenticated(authApi.isAuthenticated());
-  }, []);
-
-  // Fetch mark price
-  useEffect(() => {
-    const fetchMarkPrice = async () => {
-      try {
-        const response = await fetch('https://api.hyperliquid-testnet.xyz/info', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'allMids' }),
+  // Fetch market metadata (for max leverage)
+  const fetchMarketMeta = useCallback(async () => {
+    try {
+      const response = await fetch('https://api.hyperliquid-testnet.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
+      });
+      if (!response.ok) return;
+      
+      const [meta] = await response.json();
+      const assetMeta = meta.universe?.find((u: any) => u.name === coin);
+      if (assetMeta) {
+        setMarketMeta({
+          coin: assetMeta.name,
+          maxLeverage: assetMeta.maxLeverage,
+          szDecimals: assetMeta.szDecimals,
         });
-        const data = await response.json();
-        if (!data) return;
-        const markPriceValue = data[coin];
-        if (markPriceValue) {
-          setMarkPrice(parseFloat(markPriceValue));
-        }
-      } catch (err) {
-        console.error("[PlaceOrder] Failed to fetch price:", err);
+        setCurrentLeverage(Math.min(10, assetMeta.maxLeverage));
+        setTempLeverage(Math.min(10, assetMeta.maxLeverage));
       }
-    };
-
-    fetchMarkPrice();
-    const interval = setInterval(fetchMarkPrice, 5000);
-    return () => clearInterval(interval);
+    } catch (err) {
+      console.error('[PlaceOrder] Failed to fetch market meta:', err);
+    }
   }, [coin]);
 
-  // Check if user has position for this coin
-  const position = positions.find(p => p.coin === coin);
-  const positionSize = position ? Math.abs(parseFloat(position.szi)) : 0;
-  const positionSide = position ? (parseFloat(position.szi) > 0 ? 'long' : 'short') : null;
-
-  // Authentication flow
-  const handleAuthenticate = async () => {
-    if (!address || !signMessageAsync) return;
-    
-    setIsAuthenticating(true);
-    setOrderStatus({ type: "loading", message: "Authenticating..." });
-    
+  // Fetch mark price
+  const fetchMarkPrice = useCallback(async () => {
     try {
-      // 1. Get nonce
-      const { nonce, message } = await authApi.getNonce(address);
-      
-      // 2. Sign message
-      const signature = await signMessageAsync({ message });
-      
-      // 3. Login
-      await authApi.login(address, signature);
-      setIsAuthenticated(true);
-      
-      // 4. Check/create agent wallet
-      await ensureAgentWallet();
-      
-      setOrderStatus({ type: "success", message: "Authenticated!" });
-      setTimeout(() => setOrderStatus(null), 2000);
-    } catch (err: any) {
-      console.error("[PlaceOrder] Auth failed:", err);
-      setOrderStatus({ type: "error", message: err.message || "Authentication failed" });
-    } finally {
-      setIsAuthenticating(false);
+      const response = await fetch('https://api.hyperliquid-testnet.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'allMids' }),
+      });
+      const data = await response.json();
+      if (data?.[coin]) {
+        setMarkPrice(parseFloat(data[coin]));
+      }
+    } catch (err) {
+      console.error('[PlaceOrder] Failed to fetch price:', err);
     }
-  };
+  }, [coin]);
 
-  // Ensure agent wallet exists
+  useEffect(() => {
+    setMounted(true);
+    fetchMarketMeta();
+    fetchMarkPrice();
+    
+    const interval = setInterval(fetchMarkPrice, 5000);
+    return () => clearInterval(interval);
+  }, [fetchMarketMeta, fetchMarkPrice]);
+
+  // Update price when switching to limit or when mark price updates (if price is empty)
+  useEffect(() => {
+    if (orderType === "limit" && price === "" && markPrice > 0) {
+      setPrice(markPrice.toFixed(2));
+    }
+  }, [orderType, markPrice, price]);
+
+  // Ensure agent wallet
   const ensureAgentWallet = async () => {
     try {
       let wallet = await agentWalletApi.get();
@@ -127,7 +133,6 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
         setOrderStatus({ type: "loading", message: "Creating agent wallet..." });
         wallet = await agentWalletApi.create();
       }
-      setHasAgentWallet(!!wallet);
       return wallet;
     } catch (err: any) {
       console.error("[PlaceOrder] Agent wallet error:", err);
@@ -135,15 +140,52 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
     }
   };
 
-  // Place order handler
-  const handlePlaceOrder = async () => {
-    if (!isAuthenticated) {
-      await handleAuthenticate();
+  // Update leverage via API
+  const handleLeverageUpdate = async () => {
+    if (!canTrade || tempLeverage === currentLeverage) {
+      setShowLeverageModal(false);
       return;
+    }
+    
+    try {
+      setOrderStatus({ type: "loading", message: "Updating leverage..." });
+      await tradingApi.updateLeverage(coin, tempLeverage);
+      setCurrentLeverage(tempLeverage);
+      setOrderStatus({ type: "success", message: "Leverage updated!" });
+      setTimeout(() => setOrderStatus(null), 2000);
+      setShowLeverageModal(false);
+    } catch (err: any) {
+      setOrderStatus({ type: "error", message: err.message || "Failed to update leverage" });
+      setTimeout(() => setOrderStatus(null), 3000);
+    }
+  };
+
+  // Place order - ONLY for opening positions
+  const handlePlaceOrder = async () => {
+    if (!isWalletConnected) {
+      setOrderStatus({ type: "error", message: "Please connect your wallet first" });
+      return;
+    }
+
+    if (!canTrade) {
+      setOrderStatus({ type: "loading", message: "Please sign to authenticate..." });
+      try {
+        await signIn();
+        await ensureAgentWallet();
+      } catch (err: any) {
+        setOrderStatus({ type: "error", message: err.message || "Authentication failed" });
+        return;
+      }
     }
 
     if (!size || parseFloat(size) <= 0) {
       setOrderStatus({ type: "error", message: "Enter valid size" });
+      return;
+    }
+
+    // Limit order requires price
+    if (orderType === "limit" && (!price || parseFloat(price) <= 0)) {
+      setOrderStatus({ type: "error", message: "Enter valid price" });
       return;
     }
 
@@ -154,74 +196,37 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
       let response;
       const isBuy = side === "long";
 
-      if (activeTab === "open") {
-        // Open position
-        if (orderType === "market") {
-          response = await tradingApi.openMarketOrder({
-            coin,
-            isBuy,
-            size,
-          });
-        } else {
-          // Limit order
-          if (!price || parseFloat(price) <= 0) {
-            setOrderStatus({ type: "error", message: "Enter valid price" });
-            setIsSubmitting(false);
-            return;
-          }
-          response = await tradingApi.openLimitOrder({
-            coin,
-            isBuy,
-            price,
-            size,
-          });
-        }
-      } else if (activeTab === "close") {
-        // Close position
-        if (!position || positionSize <= 0) {
-          setOrderStatus({ type: "error", message: "No position to close" });
-          setIsSubmitting(false);
-          return;
-        }
+      // Open position only
+      if (orderType === "market") {
+        response = await tradingApi.openMarketOrder({ coin, isBuy, size });
+      } else {
+        response = await tradingApi.openLimitOrder({ 
+          coin, isBuy, price, size,
+          postOnly: false 
+        });
+      }
+
+      // Handle TP/SL if set
+      if (tpPrice || slPrice) {
+        const positionIsBuy = side === "long";
         
-        if (orderType === "market") {
-          response = await tradingApi.closeMarketOrder({
-            coin,
-            size,
-          });
-        } else {
-          if (!price || parseFloat(price) <= 0) {
-            setOrderStatus({ type: "error", message: "Enter valid price" });
-            setIsSubmitting(false);
-            return;
-          }
-          response = await tradingApi.closeLimitOrder({
-            coin,
-            price,
-            size,
-          });
-        }
-      } else if (activeTab === "tpsl") {
-        // TP/SL orders
-        const positionIsBuy = positionSide === "long";
-        
-        if (tpPrice && tpPrice !== "0") {
-          response = await tradingApi.placeTakeProfit({
+        if (tpPrice && parseFloat(tpPrice) > 0) {
+          await tradingApi.placeTakeProfit({
             coin,
             isBuy: positionIsBuy,
             size,
             takeProfitPrice: tpPrice,
-            takeProfitTrigger: tpPrice, // Use same for now
+            takeProfitTrigger: tpPrice,
           });
         }
         
-        if (slPrice && slPrice !== "0") {
-          response = await tradingApi.placeStopLoss({
+        if (slPrice && parseFloat(slPrice) > 0) {
+          await tradingApi.placeStopLoss({
             coin,
             isBuy: positionIsBuy,
             size,
             stopLossPrice: slPrice,
-            stopLossTrigger: slPrice, // Use same for now
+            stopLossTrigger: slPrice,
           });
         }
       }
@@ -229,8 +234,9 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
       if (response?.success) {
         setOrderStatus({ type: "success", message: response.message || "Order placed!" });
         setSize("");
-        setPrice("");
-        refetchAccount(); // Refresh positions
+        setTpPrice("");
+        setSlPrice("");
+        refetchAccount();
         setTimeout(() => setOrderStatus(null), 3000);
       }
     } catch (err: any) {
@@ -241,327 +247,345 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
     }
   };
 
-  // Calculate order value
+  // Calculations
   const orderPrice = orderType === "market" ? markPrice : parseFloat(price || "0");
   const orderValue = parseFloat(size || "0") * orderPrice;
-  const marginRequired = orderValue / leverage;
+  const marginRequired = orderValue / currentLeverage;
+  const maxLeverage = marketMeta?.maxLeverage || 50;
 
-  // Determine button state
+  // Size percentages based on available margin
+  const getSizePercent = (pct: number) => {
+    if (account && markPrice > 0) {
+      const available = parseFloat(account.marginSummary.totalRawUsd);
+      const maxSize = (available * currentLeverage) / markPrice;
+      return (maxSize * pct).toFixed(marketMeta?.szDecimals || 4);
+    }
+    return "0";
+  };
+
+  // Button content
   const getButtonContent = () => {
-    if (isSubmitting || isAuthenticating) {
+    if (isSubmitting || isSigning) {
       return (
-        <>
-          <Loader2 className="w-5 h-5 inline mr-2 animate-spin" />
-          {isAuthenticating ? "Authenticating..." : "Placing Order..."}
-        </>
+        <span className="flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          {isSigning ? "Signing..." : "Placing..."}
+        </span>
       );
     }
-    
-    if (!isConnected) {
+    if (!isWalletConnected) {
       return (
-        <>
-          <Wallet className="w-5 h-5 inline mr-2" />
+        <span className="flex items-center justify-center">
+          <Wallet className="w-4 h-4 mr-2" />
           Connect Wallet
-        </>
+        </span>
       );
     }
-    
-    if (!isAuthenticated) {
+    if (!canTrade) {
       return (
-        <>
-          <Wallet className="w-5 h-5 inline mr-2" />
-          Authenticate to Trade
-        </>
+        <span className="flex items-center justify-center">
+          <Shield className="w-4 h-4 mr-2" />
+          Sign to Trade
+        </span>
       );
     }
-    
-    const action = activeTab === "open" ? (side === "long" ? "Buy / Long" : "Sell / Short") : 
-                   activeTab === "close" ? "Close Position" : "Set TP/SL";
-    return action;
+    return side === "long" ? "Buy / Long" : "Sell / Short";
   };
 
   const getButtonClass = () => {
-    if (!isConnected || !isAuthenticated) {
-      return "bg-gradient-to-r from-purple-600 to-purple-500 text-white";
-    }
-    
-    if (activeTab === "close") {
-      return "bg-gradient-to-r from-orange-600 to-orange-500 text-white";
-    }
-    
-    if (side === "long") {
-      return "bg-gradient-to-r from-cyan-600 to-cyan-500 text-black";
-    }
-    
-    return "bg-gradient-to-r from-magenta-600 to-magenta-500 text-white";
+    if (!isWalletConnected) return "bg-gray-600 text-white";
+    if (!canTrade) return "bg-purple-600 text-white";
+    return side === "long" 
+      ? "bg-cyan-500 text-black hover:bg-cyan-400" 
+      : "bg-magenta-500 text-white hover:bg-magenta-400";
   };
 
-  // Prevent hydration mismatch - show loading state during SSR and initial hydration
   if (!mounted) {
     return (
-      <div className="h-full flex flex-col bg-[#080808] relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20" />
-        <div className="relative z-10 flex flex-col h-full items-center justify-center">
-          <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
-          <span className="text-gray-500 text-xs mt-2">Loading...</span>
-        </div>
+      <div className="h-full flex items-center justify-center bg-[#0a0a0a]">
+        <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-[#080808] relative overflow-hidden">
-      {/* Background Texture */}
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20" />
-
-      <div className="relative z-10 flex flex-col h-full">
-        {/* Tabs: Open / Close / TP-SL */}
-        <div className="flex gap-1 p-2 border-b border-white/10 bg-black/50">
-          {(["open", "close", "tpsl"] as TabType[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 text-[10px] font-black uppercase rounded transition-all ${
-                activeTab === tab
-                  ? "bg-white/10 text-white"
-                  : "text-gray-500 hover:text-white hover:bg-white/5"
-              }`}
-            >
-              {tab === "open" ? "Open" : tab === "close" ? "Close" : "TP/SL"}
-            </button>
-          ))}
+    <>
+      {/* Main Order Form */}
+      <div className="h-full flex flex-col bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden">
+        {/* Header */}
+        <div className="px-4 py-3 border-b border-white/10">
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">Place Order</h3>
         </div>
 
-        <div className="flex-1 overflow-auto p-4">
-          {/* Order Type (only for Open/Close) */}
-          {activeTab !== "tpsl" && (
-            <div className="flex gap-1 mb-4 p-1 bg-black rounded-lg border border-white/10">
-              {(["limit", "market"] as OrderType[]).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setOrderType(type)}
-                  className={`flex-1 py-2 text-[10px] font-black uppercase rounded transition-all ${
-                    orderType === type
-                      ? "bg-white/10 text-white shadow-sm"
-                      : "text-gray-500 hover:text-white hover:bg-white/5"
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Side Selection (only for Open) */}
-          {activeTab === "open" && (
-            <div className="flex gap-2 mb-4">
+        <div className="flex-1 overflow-auto p-4 space-y-4">
+          {/* Order Type Toggle */}
+          <div className="flex p-1 bg-black/50 rounded-lg border border-white/10">
+            {(["limit", "market"] as OrderType[]).map((type) => (
               <button
-                onClick={() => setSide("long")}
-                className={`flex-1 py-3 rounded font-black uppercase text-xs tracking-wider transition-all ${
-                  side === "long"
-                    ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/50"
-                    : "bg-white/5 text-gray-400 border border-transparent hover:bg-white/10"
+                key={type}
+                onClick={() => setOrderType(type)}
+                className={`flex-1 py-2 text-xs font-bold uppercase rounded transition-all ${
+                  orderType === type
+                    ? "bg-white/10 text-white shadow-sm"
+                    : "text-gray-500 hover:text-white"
                 }`}
               >
-                <TrendingUp className="w-4 h-4 inline mr-2" />
-                Long
+                {type}
               </button>
-              <button
-                onClick={() => setSide("short")}
-                className={`flex-1 py-3 rounded font-black uppercase text-xs tracking-wider transition-all ${
-                  side === "short"
-                    ? "bg-magenta-500/20 text-magenta-400 border border-magenta-500/50"
-                    : "bg-white/5 text-gray-400 border border-transparent hover:bg-white/10"
-                }`}
-              >
-                <TrendingDown className="w-4 h-4 inline mr-2" />
-                Short
-              </button>
-            </div>
-          )}
-
-          {/* Position Info (for Close/TP-SL) */}
-          {(activeTab === "close" || activeTab === "tpsl") && position && (
-            <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
-              <div className="flex justify-between text-[10px] mb-1">
-                <span className="text-gray-500">Current Position</span>
-                <span className={positionSide === "long" ? "text-cyan-400" : "text-magenta-400"}>
-                  {positionSide === "long" ? "LONG" : "SHORT"} {positionSize.toFixed(4)} {coin}
-                </span>
-              </div>
-              <div className="flex justify-between text-[10px]">
-                <span className="text-gray-500">Entry Price</span>
-                <span className="text-white">${parseFloat(position.entryPx).toFixed(2)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Form Fields */}
-          <div className="space-y-4">
-            {/* Price Input */}
-            {orderType !== "market" && activeTab !== "tpsl" && (
-              <div>
-                <div className="flex justify-between text-[10px] font-mono text-gray-500 mb-2 uppercase">
-                  <span>Price (USD)</span>
-                  <span className="text-cyan-400 cursor-pointer" onClick={() => setPrice(markPrice.toFixed(2))}>
-                    Mark: {markPrice.toFixed(2)}
-                  </span>
-                </div>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full bg-black border border-white/10 rounded p-3 text-sm font-mono text-white focus:border-cyan-500 focus:outline-none transition-colors"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-600">USD</div>
-                </div>
-              </div>
-            )}
-
-            {/* TP/SL Inputs */}
-            {activeTab === "tpsl" && (
-              <>
-                <div>
-                  <div className="text-[10px] font-mono text-gray-500 mb-2 uppercase">Take Profit</div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={tpPrice}
-                      onChange={(e) => setTpPrice(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full bg-black border border-white/10 rounded p-3 text-sm font-mono text-white focus:border-green-500 focus:outline-none transition-colors"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-600">USD</div>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-mono text-gray-500 mb-2 uppercase">Stop Loss</div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      value={slPrice}
-                      onChange={(e) => setSlPrice(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full bg-black border border-white/10 rounded p-3 text-sm font-mono text-white focus:border-red-500 focus:outline-none transition-colors"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-600">USD</div>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Size Input */}
-            <div>
-              <div className="flex justify-between text-[10px] font-mono text-gray-500 mb-2 uppercase">
-                <span>Size ({coin})</span>
-                <div className="flex gap-2">
-                  {["25%", "50%", "75%", "100%"].map((pct) => (
-                    <span
-                      key={pct}
-                      className="cursor-pointer hover:text-white transition-colors"
-                      onClick={() => {
-                        // Calculate size based on percentage of position or estimated max
-                        const maxSize = positionSize || 1;
-                        const pctNum = parseInt(pct) / 100;
-                        setSize((maxSize * pctNum).toFixed(4));
-                      }}
-                    >
-                      {pct}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={size}
-                  onChange={(e) => setSize(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full bg-black border border-white/10 rounded p-3 text-sm font-mono text-white focus:border-magenta-500 focus:outline-none transition-colors"
-                />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-600">{coin}</div>
-              </div>
-            </div>
-
-            {/* Leverage Slider (only for Open) */}
-            {activeTab === "open" && (
-              <div>
-                <div className="flex justify-between text-[10px] font-mono text-gray-500 mb-2 uppercase">
-                  <span>Leverage</span>
-                  <span className="text-yellow-500">{leverage}x</span>
-                </div>
-                <input
-                  type="range"
-                  min="1"
-                  max="50"
-                  value={leverage}
-                  onChange={(e) => setLeverage(parseInt(e.target.value))}
-                  className="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
-                />
-                <div className="flex justify-between text-[8px] font-mono text-gray-600 mt-1">
-                  <span>1x</span>
-                  <span>10x</span>
-                  <span>25x</span>
-                  <span>50x</span>
-                </div>
-              </div>
-            )}
-
-            {/* Order Summary */}
-            <div className="p-3 bg-white/5 border border-white/5 rounded-lg space-y-2">
-              <div className="flex justify-between text-[10px] font-mono">
-                <span className="text-gray-500">Order Value</span>
-                <span className="text-white">{orderValue.toFixed(2)} USD</span>
-              </div>
-              <div className="flex justify-between text-[10px] font-mono">
-                <span className="text-gray-500">Margin Required</span>
-                <span className="text-white">{marginRequired.toFixed(2)} USD</span>
-              </div>
-              {account && (
-                <div className="flex justify-between text-[10px] font-mono">
-                  <span className="text-gray-500">Available</span>
-                  <span className="text-white">
-                    {parseFloat(account.marginSummary.totalRawUsd).toFixed(2)} USD
-                  </span>
-                </div>
-              )}
-            </div>
+            ))}
           </div>
+
+        {/* Side Selector */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setSide("long")}
+            className={`py-3 rounded-lg font-bold uppercase text-xs tracking-wider flex items-center justify-center gap-2 transition-all ${
+              side === "long"
+                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/50"
+                : "bg-white/5 text-gray-400 hover:bg-white/10"
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" />
+            Long
+          </button>
+          <button
+            onClick={() => setSide("short")}
+            className={`py-3 rounded-lg font-bold uppercase text-xs tracking-wider flex items-center justify-center gap-2 transition-all ${
+              side === "short"
+                ? "bg-magenta-500/20 text-magenta-400 border border-magenta-500/50"
+                : "bg-white/5 text-gray-400 hover:bg-white/10"
+            }`}
+          >
+            <TrendingDown className="w-4 h-4" />
+            Short
+          </button>
         </div>
 
-        {/* Status Message */}
-        {orderStatus && (
-          <div className={`mx-4 mb-2 p-2 rounded flex items-center gap-2 text-[10px] ${
-            orderStatus.type === "loading" ? "bg-blue-500/20 text-blue-400" :
-            orderStatus.type === "success" ? "bg-green-500/20 text-green-400" :
-            "bg-red-500/20 text-red-400"
-          }`}>
-            {orderStatus.type === "loading" ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : orderStatus.type === "success" ? (
-              <CheckCircle2 className="w-3 h-3" />
-            ) : (
-              <AlertCircle className="w-3 h-3" />
-            )}
-            {orderStatus.message}
+        {/* Price Input (Limit only) */}
+        {orderType === "limit" && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-[10px] text-gray-500 uppercase font-mono">
+              <span>Price</span>
+              <button 
+                onClick={() => setPrice(markPrice.toFixed(2))}
+                className="text-cyan-400 hover:text-cyan-300"
+              >
+                Mark: {markPrice.toFixed(2)}
+              </button>
+            </div>
+            <div className="relative">
+              <input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-black border border-white/10 rounded-lg px-4 py-3 text-sm font-mono text-white focus:border-cyan-500 focus:outline-none transition-colors"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600">USD</span>
+            </div>
           </div>
         )}
 
-        {/* Place Order Button */}
-        <div className="p-4 pt-0">
+        {/* Size Input */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-[10px] text-gray-500 uppercase font-mono">
+            <span>Size ({coin})</span>
+            {isWalletConnected && (
+              <div className="flex gap-2">
+                {[0.25, 0.5, 0.75, 1].map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => setSize(getSizePercent(pct))}
+                    className="hover:text-white transition-colors"
+                  >
+                    {pct === 1 ? "MAX" : `${(pct * 100).toFixed(0)}%`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <input
+              type="number"
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+              placeholder="0.00"
+              className="w-full bg-black border border-white/10 rounded-lg px-4 py-3 text-sm font-mono text-white focus:border-magenta-500 focus:outline-none transition-colors"
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600">{coin}</span>
+          </div>
+        </div>
+
+        {/* Leverage Button */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-[10px] text-gray-500 uppercase font-mono">
+            <span>Leverage</span>
+            <span className="text-gray-600">Max: {maxLeverage}x</span>
+          </div>
           <button
-            onClick={handlePlaceOrder}
-            disabled={isSubmitting || isAuthenticating}
-            className={`w-full py-4 rounded font-black uppercase tracking-[0.15em] text-sm transition-all ${getButtonClass()} 
-              ${(isSubmitting || isAuthenticating) ? "opacity-70 cursor-not-allowed" : "hover:brightness-110 active:scale-[0.98]"}
-              shadow-[0_0_20px_rgba(6,182,212,0.3)]`}
+            onClick={() => setShowLeverageModal(true)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-black border border-white/10 rounded-lg hover:border-white/20 transition-colors"
           >
-            {getButtonContent()}
+            <span className="text-sm font-mono text-white">{currentLeverage}x</span>
+            <Settings2 className="w-4 h-4 text-gray-500" />
           </button>
         </div>
+
+        {/* TP/SL Toggle */}
+        <button
+          onClick={() => setShowTpSl(!showTpSl)}
+          className="w-full flex items-center justify-between py-2 text-[10px] text-gray-500 uppercase font-mono hover:text-white transition-colors"
+        >
+          <span>Take Profit / Stop Loss (Optional)</span>
+          <span className={`transform transition-transform ${showTpSl ? "rotate-180" : ""}`}>▼</span>
+        </button>
+
+        {/* TP/SL Inputs */}
+        {showTpSl && (
+          <div className="space-y-3 p-3 bg-white/5 rounded-lg border border-white/10">
+            <div className="space-y-2">
+              <span className="text-[10px] text-gray-500 uppercase font-mono">Take Profit</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={tpPrice}
+                  onChange={(e) => setTpPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm font-mono text-white focus:border-green-500 focus:outline-none transition-colors"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600">USD</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <span className="text-[10px] text-gray-500 uppercase font-mono">Stop Loss</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={slPrice}
+                  onChange={(e) => setSlPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-black border border-white/10 rounded-lg px-4 py-2 text-sm font-mono text-white focus:border-red-500 focus:outline-none transition-colors"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600">USD</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Order Summary */}
+        <div className="p-3 bg-white/5 rounded-lg border border-white/10 space-y-2">
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-500">Order Value</span>
+            <span className="font-mono text-white">${orderValue.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+            <span className="text-gray-500">Margin Required</span>
+            <span className="font-mono text-white">${marginRequired.toFixed(2)}</span>
+          </div>
+          {isWalletConnected && account && (
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-500">Available</span>
+              <span className="font-mono text-white">
+                ${parseFloat(account.marginSummary.totalRawUsd).toFixed(2)}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Status Message */}
+      {orderStatus && (
+        <div className={`mx-4 mb-2 p-3 rounded-lg flex items-center gap-2 text-xs ${
+          orderStatus.type === "loading" ? "bg-blue-500/20 text-blue-400" :
+          orderStatus.type === "success" ? "bg-green-500/20 text-green-400" :
+          "bg-red-500/20 text-red-400"
+        }`}>
+          {orderStatus.type === "loading" ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : orderStatus.type === "success" ? (
+            <CheckCircle2 className="w-4 h-4" />
+          ) : (
+            <AlertCircle className="w-4 h-4" />
+          )}
+          {orderStatus.message}
+        </div>
+      )}
+
+      {/* Action Button */}
+      <div className="p-4 pt-2">
+        <button
+          onClick={handlePlaceOrder}
+          disabled={isSubmitting || isSigning}
+          className={`w-full py-4 rounded-lg font-black uppercase tracking-wider text-sm transition-all flex items-center justify-center ${getButtonClass()} 
+            ${(isSubmitting || isSigning) ? "opacity-50 cursor-not-allowed" : "hover:brightness-110 active:scale-[0.98]"}`}
+        >
+          {getButtonContent()}
+        </button>
+        
+        {!isWalletConnected && (
+          <p className="text-center text-[10px] text-gray-600 mt-2">Connect wallet to trade</p>
+        )}
+        {isWalletConnected && !canTrade && (
+          <p className="text-center text-[10px] text-purple-400/70 mt-2">Sign to verify ownership</p>
+        )}
       </div>
     </div>
+
+    {/* Leverage Modal - Portal to document.body to escape overflow-hidden containers */}
+    {showLeverageModal && typeof window !== 'undefined' && createPortal(
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div className="w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+          <div className="flex items-center justify-between p-4 border-b border-white/10">
+            <h3 className="text-sm font-bold text-white">Adjust Leverage</h3>
+            <button 
+              onClick={() => setShowLeverageModal(false)}
+              className="p-1 hover:bg-white/10 rounded transition-colors"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+          
+          <div className="p-6 space-y-6">
+            <div className="text-center">
+              <span className="text-4xl font-black text-white">{tempLeverage}x</span>
+              <p className="text-xs text-gray-500 mt-1">Max: {maxLeverage}x</p>
+            </div>
+            
+            <input
+              type="range"
+              min="1"
+              max={maxLeverage}
+              value={tempLeverage}
+              onChange={(e) => setTempLeverage(parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+            />
+            
+            <div className="flex justify-between text-[10px] text-gray-600 font-mono">
+              <span>1x</span>
+              <span>{Math.floor(maxLeverage / 2)}x</span>
+              <span>{maxLeverage}x</span>
+            </div>
+          </div>
+          
+          <div className="p-4 border-t border-white/10 space-y-2">
+            <button
+              onClick={handleLeverageUpdate}
+              disabled={!canTrade}
+              className="w-full py-3 bg-cyan-500 text-black font-bold uppercase text-xs rounded-lg hover:bg-cyan-400 transition-colors disabled:opacity-50"
+            >
+              {canTrade ? "Confirm" : "Sign to Update"}
+            </button>
+            <button
+              onClick={() => setShowLeverageModal(false)}
+              className="w-full py-3 bg-transparent text-gray-500 font-bold uppercase text-xs rounded-lg hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 };

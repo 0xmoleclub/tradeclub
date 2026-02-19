@@ -2,31 +2,62 @@
 
 import React from "react";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { mainnet, arbitrum, base, optimism } from "wagmi/chains";
-import { injected, coinbaseWallet } from "wagmi/connectors";
+import { arbitrum } from "wagmi/chains";
+import { injected, coinbaseWallet, walletConnect } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthProvider } from "@/hooks";
+
+// Get project ID from env or use empty (will disable WalletConnect if not set)
+const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || "";
 
 const config = createConfig({
-  chains: [mainnet, arbitrum, base, optimism],
+  chains: [arbitrum], // Only Arbitrum
   connectors: [
-    injected(),
-    coinbaseWallet({ appName: "TradeClub" }),
+    // Generic injected connector - detects ALL installed browser wallets
+    // (MetaMask, Coinbase Wallet, Rainbow, Phantom, etc.)
+    injected({
+      shimDisconnect: true,
+    }),
+    // Coinbase Wallet (standalone - for users who prefer Coinbase's UI)
+    coinbaseWallet({ 
+      appName: "TradeClub",
+      headlessMode: false,
+    }),
+    // WalletConnect (only if project ID is set) - for mobile wallets
+    ...(projectId ? [walletConnect({
+      projectId,
+      metadata: {
+        name: "TradeClub",
+        description: "Professional perpetual trading platform",
+        url: typeof window !== 'undefined' ? window.location.origin : 'https://tradeclub.xyz',
+        icons: [],
+      },
+    })] : []),
   ],
   transports: {
-    [mainnet.id]: http(),
-    [arbitrum.id]: http(),
-    [base.id]: http(),
-    [optimism.id]: http(),
+    // Arbitrum RPC endpoint (CORS-friendly)
+    [arbitrum.id]: http('https://arb1.arbitrum.io/rpc'),
   },
+  // Enable multi-injected provider discovery for better wallet detection
+  multiInjectedProviderDiscovery: true,
 });
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 5000,
+    },
+  },
+});
 
 export const WalletProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

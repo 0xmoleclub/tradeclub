@@ -206,7 +206,9 @@ export function useHyperliquidOrderbook(symbol: string = "BTC-PERP") {
         };
 
         ws.onerror = (err) => {
-          console.error("[OrderBook] WebSocket error:", err);
+          // WebSocket errors are normal when connection fails, we fallback to REST
+          // Error event doesn't contain useful info in browser, just log type
+          console.log("[OrderBook] WebSocket connection failed, using REST fallback");
         };
 
         ws.onclose = () => {

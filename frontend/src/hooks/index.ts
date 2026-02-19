@@ -10,3 +10,4 @@ export { useHyperliquidOrderHistory, useHyperliquidOrderHistoryByCoin, type Hist
 export type { TwapOrder } from './useHyperliquidTwap'; // backward compat
 export { useMatching } from './useMatching';
 export { useMouseParallax } from './useMouseParallax';
+export { useAuth, useRequireTrade, useRequireWallet, AuthProvider } from './useAuth';
