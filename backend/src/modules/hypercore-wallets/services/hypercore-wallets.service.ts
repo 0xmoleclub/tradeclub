@@ -31,7 +31,9 @@ export class HypercoreWalletsService {
   async createOrReplaceWallet(userId: string): Promise<{ agentAddress: string }> {
     // Generate new EVM keypair
     const keypair = this.evmCryptoService.generateKeypair();
-    const encryptedAgentKey = this.evmCryptoService.encryptPrivateKey(keypair.privateKey);
+    const encryptedAgentKey = await this.evmCryptoService.encryptPrivateKey(
+      keypair.privateKey,
+    );
 
     // Upsert: Create if not exists, replace if exists
     await this.prisma.hypercoreWallet.upsert({

@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, hkdf } from 'crypto';
+import { promisify } from 'util';
+
+const hkdfAsync = promisify(hkdf);
 
 /**
  * Service for EVM cryptographic operations
@@ -9,15 +12,13 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypt
  */
 @Injectable()
 export class EvmCryptoService {
-  private readonly encryptionKey: Buffer;
-
   constructor(private configService: ConfigService) {
     const key = this.configService.get<string>('WALLET_ENCRYPTION_KEY');
     if (!key) {
-      throw new Error('WALLET_ENCRYPTION_KEY is required for wallet encryption');
+      throw new Error(
+        'WALLET_ENCRYPTION_KEY is required for wallet encryption',
+      );
     }
-    // Derive 32-byte key from the provided key using scrypt
-    this.encryptionKey = scryptSync(key, 'salt', 32);
   }
 
   /**
@@ -27,7 +28,7 @@ export class EvmCryptoService {
   generateKeypair(): { address: string; privateKey: `0x${string}` } {
     const privateKey = generatePrivateKey();
     const account = privateKeyToAccount(privateKey);
-    
+
     return {
       address: account.address,
       privateKey,
@@ -39,25 +40,31 @@ export class EvmCryptoService {
    * @param privateKey - The private key to encrypt (hex string with 0x prefix)
    * @returns Encrypted data as base64 string (iv:authTag:ciphertext)
    */
-  encryptPrivateKey(privateKey: string): string {
+  async encryptPrivateKey(privateKey: string): Promise<string> {
     // Generate random IV (16 bytes for AES-GCM)
     const iv = randomBytes(16);
-    
+
     // Create cipher
-    const cipher = createCipheriv('aes-256-gcm', this.encryptionKey, iv);
-    
+    const cipher = createCipheriv(
+      'aes-256-gcm',
+      await this.getEncryptionKey(),
+      iv,
+    );
+
     // Encrypt the private key (remove 0x prefix for storage efficiency)
-    const keyToEncrypt = privateKey.startsWith('0x') ? privateKey.slice(2) : privateKey;
-    
+    const keyToEncrypt = privateKey.startsWith('0x')
+      ? privateKey.slice(2)
+      : privateKey;
+
     let encrypted = cipher.update(keyToEncrypt, 'utf8', 'base64');
     encrypted += cipher.final('base64');
-    
+
     // Get authentication tag (16 bytes for GCM)
     const authTag = cipher.getAuthTag();
-    
+
     // Combine: iv:authTag:ciphertext
     const result = `${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted}`;
-    
+
     return result;
   }
 
@@ -66,27 +73,43 @@ export class EvmCryptoService {
    * @param encryptedData - The encrypted data (iv:authTag:ciphertext)
    * @returns Decrypted private key with 0x prefix
    */
-  decryptPrivateKey(encryptedData: string): `0x${string}` {
+  async decryptPrivateKey(encryptedData: string): Promise<`0x${string}`> {
     const parts = encryptedData.split(':');
-    
+
     if (parts.length !== 3) {
       throw new Error('Invalid encrypted data format');
     }
-    
+
     const [ivBase64, authTagBase64, encrypted] = parts;
-    
+
     const iv = Buffer.from(ivBase64, 'base64');
     const authTag = Buffer.from(authTagBase64, 'base64');
-    
+
     // Create decipher
-    const decipher = createDecipheriv('aes-256-gcm', this.encryptionKey, iv);
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      await this.getEncryptionKey(),
+      iv,
+    );
     decipher.setAuthTag(authTag);
-    
+
     // Decrypt
     let decrypted = decipher.update(encrypted, 'base64', 'utf8');
     decrypted += decipher.final('utf8');
-    
+
     // Add 0x prefix back
     return `0x${decrypted}` as `0x${string}`;
+  }
+
+  // Derive 32-byte key from the provided key using hkdf 256 (fast derive algo)
+  private async getEncryptionKey(): Promise<Buffer> {
+    const encrypted: ArrayBuffer = await hkdfAsync(
+      'sha256',
+      this.configService.getOrThrow<string>('WALLET_ENCRYPTION_KEY'),
+      this.configService.get<string>('WALLET_ENCRYPTION_KEY_SALT') || 'salt',
+      'wallet-encryption-key:v1', // info (used to differentiate between derived keys)
+      32,
+    );
+    return Buffer.from(encrypted);
   }
 }
