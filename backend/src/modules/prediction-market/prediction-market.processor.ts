@@ -4,15 +4,15 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/database/prisma.service';
 import { LoggerService } from '@shared/logger/logger.service';
 import { ChainServiceFactory } from '@modules/chain-services/chain-service-factory';
+import { JOBS_QUEUE_NAME } from './constants/prediction-market-jobs.constants';
 import { PredictionMarketService } from './services/prediction-market.service';
 import {
   CreateMarketJob,
-  JOBS_QUEUE,
   PREDICTION_MARKET_JOBS,
   ProposeOutcomeJob,
-} from './prediction-market.jobs';
+} from './types/prediction-market-jobs.type';
 
-@Processor(JOBS_QUEUE)
+@Processor(JOBS_QUEUE_NAME)
 export class PredictionMarketProcessor extends WorkerHost {
   constructor(
     private readonly chainFactory: ChainServiceFactory,

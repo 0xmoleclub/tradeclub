@@ -20,12 +20,12 @@ import {
 } from './prediction-market.service';
 import { EvmCryptoService } from '@modules/hypercore-wallets/services';
 import { Queue } from 'bullmq';
+import { JOBS_QUEUE_NAME } from '../constants/prediction-market-jobs.constants';
 import {
-  JOBS_QUEUE,
   CreateMarketJob,
   PREDICTION_MARKET_JOBS,
   ProposeOutcomeJob,
-} from '../prediction-market.jobs';
+} from '../types/prediction-market-jobs.type';
 import { abi as MarketFactoryAbi } from '../../../../../contracts/artifacts/contracts/MarketFactory.sol/MarketFactory.json';
 import { abi as MatchSettlementAbi } from '../../../../../contracts/artifacts/contracts/MatchSettlement.sol/MatchSettlement.json';
 
@@ -35,7 +35,7 @@ export class EvmPredictionMarketService
   implements OnModuleInit
 {
   constructor(
-    @InjectQueue(JOBS_QUEUE) private readonly queue: Queue,
+    @InjectQueue(JOBS_QUEUE_NAME) private readonly queue: Queue,
     private readonly evmCryptoService: EvmCryptoService,
     private readonly configService: ConfigService,
     private readonly registry: ChainServiceRegistry,

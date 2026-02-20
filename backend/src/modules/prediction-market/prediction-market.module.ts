@@ -4,7 +4,7 @@ import { EvmCryptoService } from '@/modules/hypercore-wallets/services';
 import { ChainServicesModule } from '@/modules/chain-services/chain-services.module';
 import { EvmPredictionMarketService } from './services/evm-prediction-market.service';
 import { BullModule } from '@nestjs/bullmq';
-import { JOBS_QUEUE } from './prediction-market.jobs';
+import { JOBS_QUEUE_NAME } from './constants/prediction-market-jobs.constants';
 import { PredictionMarketProcessor } from './prediction-market.processor';
 
 @Module({
@@ -12,7 +12,7 @@ import { PredictionMarketProcessor } from './prediction-market.processor';
     ConfigModule,
     ChainServicesModule,
     BullModule.registerQueue({
-      name: JOBS_QUEUE,
+      name: JOBS_QUEUE_NAME,
       defaultJobOptions: {
         attempts: 5,
         backoff: { type: 'exponential', delay: 5000 },

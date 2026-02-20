@@ -1,7 +1,7 @@
 import {
   CreateMarketJob,
   ProposeOutcomeJob,
-} from '../prediction-market.jobs';
+} from '../types/prediction-market-jobs.type';
 
 export interface CreateMarketParams {
   matchId: string;
