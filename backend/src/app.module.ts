@@ -2,7 +2,13 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 
-import { appConfig, databaseConfig, jwtConfig, throttleConfig } from './config';
+import {
+  appConfig,
+  chainConfig,
+  databaseConfig,
+  jwtConfig,
+  throttleConfig,
+} from './config';
 import { DatabaseModule } from './database/database.module';
 import { SharedModule } from './shared/shared.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -30,7 +36,7 @@ import { BattleModule } from './modules/battle/battle.module';
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, jwtConfig, throttleConfig],
+      load: [appConfig, chainConfig, databaseConfig, jwtConfig, throttleConfig],
       envFilePath: ['.env', '.env.local'],
     }),
 
