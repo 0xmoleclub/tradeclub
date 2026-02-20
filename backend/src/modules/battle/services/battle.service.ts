@@ -5,6 +5,7 @@ import {
   BattlePlayerStatus,
   UserStatus,
   Prisma,
+  Battle,
 } from '@prisma/client';
 import { LoggerService } from '@/shared/logger/logger.service';
 import { Injectable } from '@nestjs/common';
@@ -12,6 +13,8 @@ import { CreateBattleResultDto } from '../dto';
 import { BattlePlayerService } from './battle-player.service';
 import { buildRanking } from '../utils/ranking.util';
 import { computeEloDelta } from '../utils/elo.util';
+import { ChainServiceFactory } from '@/modules/chain-services/chain-service-factory';
+import { PredictionMarketService } from '@/modules/prediction-market/services/prediction-market.service';
 
 // ORCHESTRATOR SERVICE FOR BATTLE LIFECYCLE
 
@@ -21,6 +24,7 @@ export class BattleService {
     private readonly player: BattlePlayerService,
     private readonly prisma: PrismaService,
     private readonly logger: LoggerService,
+    private readonly chainFactory: ChainServiceFactory,
   ) {}
 
   /**
@@ -38,13 +42,14 @@ export class BattleService {
    * Creates a new battle based on the matched players from matchmaking.
    * This is triggered when a match is found and a battle needs to be created.
    */
-  async create(match: MatchGroup) {
-    return this.prisma.$transaction(async (tx) => {
-      const battle = await tx.battle.create({
+  async create(match: MatchGroup): Promise<Battle> {
+    const battle = await this.prisma.$transaction(async (tx) => {
+      const b = await tx.battle.create({
         data: {
           status: BattleStatus.MATCHING, // initial status
           maxPlayers: match.players.length,
           metadata: {
+            matchId: match.matchId,
             avgElo: match.avgElo,
             forced: match.forced,
             matchmakingCreatedAt: match.createdAt,
@@ -54,7 +59,7 @@ export class BattleService {
 
       await tx.battlePlayer.createMany({
         data: match.players.map((p, index) => ({
-          battleId: battle.id,
+          battleId: b.id,
           userId: p.userId,
           status: BattlePlayerStatus.JOINED,
           slot: index + 1,
@@ -62,10 +67,30 @@ export class BattleService {
         })),
       });
 
-      this.logger.log(`Created battle ${battle.id} for match ${match.matchId}`);
-
-      return battle;
+      this.logger.log(`Created battle ${b.id} for match ${match.matchId}`);
+      return b;
     });
+
+    if (!battle) {
+      this.logger.error(`Failed to create battle for match ${match.matchId}`);
+      throw new Error(`Failed to create battle for match ${match.matchId}`);
+    }
+
+    try {
+      await this.chainFactory
+        .getCurrent(PredictionMarketService)
+        .enqueueCreateMarket({
+          battleId: battle.id,
+          matchId: match.matchId,
+        });
+    } catch (error) {
+      this.logger.error(
+        `Failed to enqueue market creation for match ${match.matchId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
+
+    return battle;
   }
 
   /**
@@ -109,7 +134,7 @@ export class BattleService {
    * This is triggered when the battle is evaluated and determined to be finished.
    */
   async battleFinish(battleId: string, dto: CreateBattleResultDto) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const battle = await tx.battle.findUnique({
         where: { id: battleId },
         include: { players: true },
@@ -140,6 +165,17 @@ export class BattleService {
 
       return result;
     });
+
+    if (result) {
+      void this.proposeOutcomeAsync(battleId, dto).catch((error) => {
+        this.logger.error(
+          `Failed to propose onchain outcome for battle ${battleId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      });
+    }
+
+    return result;
   }
 
   /**
@@ -248,4 +284,44 @@ export class BattleService {
       });
     }
   }
+
+  private async proposeOutcomeAsync(
+    battleId: string,
+    dto: CreateBattleResultDto,
+  ) {
+    const battle = await this.prisma.battle.findUnique({
+      where: { id: battleId },
+      select: { metadata: true },
+    });
+
+    const metadata = (battle?.metadata as Record<string, unknown> | null) ?? {};
+    const matchId = metadata.matchId as string | undefined;
+    if (!matchId) {
+      this.logger.warn(`Battle ${battleId} missing matchId metadata`);
+      return;
+    }
+
+    const ranking = buildRanking(dto.metrics);
+    if (ranking.length === 0) {
+      this.logger.warn(`Battle ${battleId} has no ranking metrics`);
+      return;
+    }
+
+    // `slot` is a 1-based player position in the ranking, while the prediction market
+    // contract expects a zero-based outcome index. The top-ranked player is at
+    // `ranking[0]`, so we subtract 1 from its slot to derive the on-chain outcome id.
+    // If a battle has N players (N slots), the first N outcomes in prediction market contract
+    // respectively corresponds to the prediction of each player winning
+    const outcome = ranking[0].slot - 1;
+    await this.chainFactory
+      .getCurrent(PredictionMarketService)
+      .enqueueProposeOutcome({
+        battleId,
+        matchId,
+        outcome,
+        dataHash: dto.dataHash,
+        codeCommitHash: dto.codeCommitHash,
+      });
+  }
 }
+    // respectively correspond to the prediction of each player winning

@@ -6,8 +6,10 @@ import { BattlePlayerService } from './services/battle-player.service';
 import { BattleEvents } from './events/battle.event';
 import { BattlePlayerEvents } from './events/battle-player.event';
 import { BattleLifecycleService } from './services/battle-lifecylce.service';
+import { PredictionMarketModule } from '@/modules/prediction-market/prediction-market.module';
 
 @Module({
+  imports: [PredictionMarketModule],
   providers: [
     BattlePlayerService,
     BattleService,
