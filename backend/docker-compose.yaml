@@ -1,0 +1,42 @@
+services:
+  tradeclub-db:
+    image: postgres:17-alpine
+    container_name: tradeclub-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
+    ports:
+      - "5446:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tradeclub-network
+  tradeclub-redis:
+    image: redis:7-alpine
+    container_name: tradeclub-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tradeclub-network
+    
+networks:
+  tradeclub-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
