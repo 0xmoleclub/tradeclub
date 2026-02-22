@@ -3,21 +3,20 @@ import { Job } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/database/prisma.service';
 import { LoggerService } from '@shared/logger/logger.service';
-import { ChainServiceFactory } from '@modules/chain-services/chain-service-factory';
-import { JOBS_QUEUE_NAME } from './constants/prediction-market-jobs.constants';
-import { PredictionMarketService } from './services/prediction-market.service';
+import { CONTRACT_CALL_QUEUE } from '../constants/queues.constants';
 import {
   CreateMarketJob,
   PREDICTION_MARKET_JOBS,
   ProposeOutcomeJob,
-} from './types/prediction-market-jobs.type';
+} from '../types/prediction-job.type';
+import { PredictionMarketContractService } from '../services/prediction-market-contract.service';
 
-@Processor(JOBS_QUEUE_NAME)
-export class PredictionMarketProcessor extends WorkerHost {
+@Processor(CONTRACT_CALL_QUEUE)
+export class PredictionContractProcessor extends WorkerHost {
   constructor(
-    private readonly chainFactory: ChainServiceFactory,
     private readonly prisma: PrismaService,
     private readonly logger: LoggerService,
+    private readonly contractService: PredictionMarketContractService,
   ) {
     super();
   }
@@ -38,10 +37,8 @@ export class PredictionMarketProcessor extends WorkerHost {
   }
 
   private async handleCreateMarket(job: Job<CreateMarketJob>) {
-    const { battleId, matchId } = job.data;
-    const result = await this.chainFactory
-      .getCurrent(PredictionMarketService)
-      .createMarket({ matchId });
+    const { battleId } = job.data;
+    const result = await this.contractService.createMarket({ matchId: battleId }); // TODO: Using offchain battleId as onchain matchId for now, should refactor
 
     await this.updateMetadata(battleId, {
       onchain: {
@@ -50,19 +47,20 @@ export class PredictionMarketProcessor extends WorkerHost {
       },
     });
 
-    this.logger.log(`Onchain market created for ${matchId} (job ${job.id})`);
+    this.logger.log(`Onchain market created for ${battleId} (job ${job.id})`);
   }
 
   private async handleProposeOutcome(job: Job<ProposeOutcomeJob>) {
     const { battleId, matchId, outcome, dataHash, codeCommitHash } = job.data;
-    const result = await this.chainFactory
-      .getCurrent(PredictionMarketService)
-      .proposeOutcome({ matchId, outcome, dataHash, codeCommitHash });
+    const result = await this.contractService.proposeOutcome({
+      matchId,
+      outcome,
+      dataHash,
+      codeCommitHash,
+    });
 
     await this.updateMetadata(battleId, {
-      onchain: {
-        outcomeTxHash: result.txHash,
-      },
+      onchain: { outcomeTxHash: result.txHash },
     });
 
     this.logger.log(`Onchain outcome proposed for ${matchId} (job ${job.id})`);
