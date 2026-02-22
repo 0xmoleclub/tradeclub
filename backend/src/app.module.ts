@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 
@@ -9,6 +9,7 @@ import {
   jwtConfig,
   throttleConfig,
 } from './config';
+import { appEnvSchema } from './config/validation/app.schema';
 import { DatabaseModule } from './database/database.module';
 import { SharedModule } from './shared/shared.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -36,8 +37,15 @@ import { BattleModule } from './modules/battle/battle.module';
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, chainConfig, databaseConfig, jwtConfig, throttleConfig],
+      load: [
+        appConfig,
+        chainConfig,
+        databaseConfig,
+        jwtConfig,
+        throttleConfig,
+      ],
       envFilePath: ['.env', '.env.local'],
+      validationSchema: appEnvSchema,
     }),
 
     // Rate limiting
