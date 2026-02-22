@@ -109,10 +109,11 @@ model Battle {
   actualDurationMs   Int? // Actual duration of the battle in miliseconds (written when battle finishes)
 
   // Relations
-  players                 BattlePlayer[]
-  results                 BattleResult[]
-  battlePredictionChoices BattlePredictionChoice[]
-  battlePredictionTxs     BattlePredictionTrade[]
+  players                   BattlePlayer[]
+  results                   BattleResult[]
+  battlePredictionChoices   BattlePredictionChoice[]
+  battlePredictionTxs       BattlePredictionTrade[]
+  battlePredictionQuestions BattlePredictionQuestion[]
 }
 
 model BattlePlayer {
@@ -138,15 +139,16 @@ model BattlePlayer {
   @@index([battleId])
 }
 
+// BattleResult: evaluated outcome for a battle prediction question.
+// Records the final judgement (winning choice), a deterministic data hash for audit,
+// evaluation metadata (e.g., code commit), and related data points (BattleResultData).
+// May reference the source prediction question and prediction trades used to settle the result.
 model BattleResult {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  battleId String
-  battle   Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
-
   // Description of judgement
-  name String
+  description String
 
   // Deterministic hash of all evaluated data
   dataHash String
@@ -157,12 +159,21 @@ model BattleResult {
   // Traceability
   codeCommitHash String
 
-  dataPoints          BattleResultData[]
-  battlePredictionTxs BattlePredictionTrade[]
+  outcome Int // 0 = first choice, 1 = second, etc.
 
+  battleId                   String
+  battlePredictionQuestionId String
+
+  battle                   Battle                   @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  battlePredictionQuestion BattlePredictionQuestion @relation(fields: [battlePredictionQuestionId], references: [id])
+  dataPoints               BattleResultData[]
+
+  @@unique([battlePredictionQuestionId, battleId, outcome])
   @@index([battleId])
 }
 
+// Individual data points that contribute to a BattleResult.
+// For example, if the result is based on PnL, there would be one BattleResultData entry per player with their respective PnL value.
 model BattleResultData {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
@@ -178,6 +189,31 @@ model BattleResultData {
   @@index([metric])
 }
 
+// Questions for battle predictions. For example: "Who will have the highest PnL?", "Will Player 1 achieve >20% ROI?", etc.
+// Each question can have multiple choices (e.g. Player 1, Player 2, Player 3, Player 4 for the first question; Yes/No for the second question, etc.)
+model BattlePredictionQuestion {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  questionText String
+  description  String?
+  shares       Decimal @default(0) @db.Decimal(38, 18) // total shares traded for this question (sum of all choices)
+  volume       Decimal @default(0) @db.Decimal(38, 18) // total volume traded for this question (sum of all choices)
+  size         Decimal @default(0) @db.Decimal(38, 18) // total size traded for this question (sum of all choices)
+
+  battleId      String
+  marketAddress String? // address of the on-chain prediction market contract for this question
+
+  // Relations
+  battle  Battle                   @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  choices BattlePredictionChoice[]
+  results BattleResult[]
+  trades  BattlePredictionTrade[]
+
+  @@unique([marketAddress])
+}
+
+// Choice for a BattlePredictionQuestion. Tracks granular info: shares, volume, size, price, and links to the question and battle.
 model BattlePredictionChoice {
   id        String   @id @default(uuid())
   shares    Decimal  @default(0) @db.Decimal(38, 18)
@@ -188,10 +224,14 @@ model BattlePredictionChoice {
 
   battleId String
 
-  battle  Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
-  outcome Int // 0 = first result, 1 = second, etc.
+  outcome                    Int // 0 = first result, 1 = second, etc.
+  battlePredictionQuestionId String
 
-  @@unique([battleId, outcome])
+  // Relations
+  battle   Battle                   @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  question BattlePredictionQuestion @relation(fields: [battlePredictionQuestionId], references: [id])
+
+  @@unique([battleId, battlePredictionQuestionId, outcome])
 }
 
 enum PredictionTradeType {
@@ -203,19 +243,20 @@ model BattlePredictionTrade {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  txHash      String
-  blockNumber Int
-  type        PredictionTradeType
-  shares      Decimal             @default(0) @db.Decimal(38, 18)
-  priceUsd    Decimal             @default(0) @db.Decimal(38, 18)
-  costUsd     Decimal             @default(0) @db.Decimal(38, 18)
-  userAddress String
+  txHash        String
+  blockNumber   Int
+  marketAddress String // address of the prediction market contract
+  type          PredictionTradeType
+  shares        Decimal             @default(0) @db.Decimal(38, 18)
+  priceUsd      Decimal             @default(0) @db.Decimal(38, 18)
+  costUsd       Decimal             @default(0) @db.Decimal(38, 18)
+  userAddress   String
 
-  battleId       String
-  battleResultId String
+  battleId                   String
+  battlePredictionQuestionId String
 
-  battle       Battle       @relation(fields: [battleId], references: [id], onDelete: Cascade)
-  battleResult BattleResult @relation(fields: [battleResultId], references: [id], onDelete: Cascade)
+  battle         Battle                   @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  battleQuestion BattlePredictionQuestion @relation(fields: [battlePredictionQuestionId], references: [id])
 
   @@map("BattlePredictionOrder")
 }
