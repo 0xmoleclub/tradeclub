@@ -56,6 +56,26 @@ export class BattleService {
         },
       });
 
+      // Every battle starts with a default prediction question "Who will win the battle?" and N outcomes (N = number of players) corresponding to "Player 1 wins", "Player 2 wins", etc.
+      const question = await tx.battlePredictionQuestion.create({
+        data: {
+          battleId: b.id,
+          questionText: 'Who will win the battle?',
+          description:
+            'Predict which player will win the battle based on who has the highest PnL at the end.',
+        },
+      });
+
+      await tx.battlePredictionChoice.createMany({
+        data: match.players.map((_, index) => {
+          return {
+            battleId: b.id,
+            battlePredictionQuestionId: question.id,
+            outcome: index,
+          };
+        }),
+      });
+
       await tx.battlePlayer.createMany({
         data: match.players.map((p, index) => ({
           battleId: b.id,
@@ -238,10 +258,12 @@ export class BattleService {
     return tx.battleResult.create({
       data: {
         battleId,
-        name: dto.name,
+        description: dto.description,
         dataHash: dto.dataHash,
         isCorrect: dto.isCorrect,
         codeCommitHash: dto.codeCommitHash,
+        battlePredictionQuestionId: dto.questionId,
+        outcome: dto.outcome,
         dataPoints: {
           create: dto.metrics.map((m) => ({
             metric: m.metric,

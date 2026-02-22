@@ -5,11 +5,12 @@ export class BattleMetricDto {
   playerSlot: number;
   value: number;
 }
-
 export class CreateBattleResultDto {
-  name: string;
+  description: string;
   dataHash: string;
   isCorrect: boolean;
   codeCommitHash: string;
   metrics: BattleMetricDto[];
+  outcome: number;
+  questionId: string;
 }
