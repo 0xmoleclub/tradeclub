@@ -1,50 +1,37 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { appConfig, chainConfig, databaseConfig } from '@config/index';
+import {
+  appConfig,
+  chainConfig,
+  databaseConfig,
+  indexerConfig,
+} from '@config/index';
+import { workerEnvSchema } from '@config/validation/worker.schema';
 import { DatabaseModule } from '@/database/database.module';
 import { SharedModule } from '@shared/shared.module';
 import { ChainServicesModule } from '@modules/chain-services/chain-services.module';
-import { PredictionMarketModule } from '@modules/prediction-market/prediction-market.module';
+import { IndexerModule } from '@modules/indexer/indexer.module';
+import { getRedisConnection } from '@shared/utils/redis';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, chainConfig, databaseConfig],
+      load: [appConfig, chainConfig, databaseConfig, indexerConfig],
       envFilePath: ['.env', '.env.local'],
+      validationSchema: workerEnvSchema,
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const redisUrl = configService.get<string>('REDIS_URL');
-        if (redisUrl) {
-          return { connection: { url: redisUrl } };
-        }
-
-        const host = configService.get<string>('REDIS_HOST') || '127.0.0.1';
-        const port = parseInt(
-          configService.get<string>('REDIS_PORT') || '6379',
-          10,
-        );
-        const password = configService.get<string>('REDIS_PASSWORD');
-        const db = parseInt(configService.get<string>('REDIS_DB') || '0', 10);
-
-        return {
-          connection: {
-            host,
-            port,
-            password: password || undefined,
-            db,
-          },
-        };
-      },
+      useFactory: (configService: ConfigService) =>
+        getRedisConnection(configService),
     }),
     DatabaseModule,
     SharedModule,
     ChainServicesModule,
-    PredictionMarketModule,
+    IndexerModule,
   ],
 })
 export class WorkerModule {}

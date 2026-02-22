@@ -1,54 +1,111 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import type { Redis } from 'ioredis';
 
+/** Injection token for the in-process memory Keyv store. */
+export const MEMORY_STORE = Symbol('MEMORY_STORE');
+/** Injection token for the raw ioredis client (null when Redis is not configured). */
+export const REDIS_STORE = Symbol('REDIS_STORE');
+
+/** Minimal async K/V interface implemented by Keyv (used for memory store). */
+export interface KeyvStore {
+  get<T>(key: string): Promise<T | undefined>;
+  set(key: string, value: unknown, ttl?: number): Promise<boolean | undefined>;
+  delete(key: string): Promise<boolean>;
+  clear?(): Promise<void>;
+}
+
+/**
+ * Unified cache service.
+ *
+ *   - `memory.*`  → in-process LRU via Keyv/CacheableMemory (local to replica)
+ *   - `redis.*`   → JSON K/V helpers on top of ioredis (cross-replica)
+ *   - `this.redis` → raw ioredis client for any native command (SADD, ZADD, etc.)
+ *
+ * TTL parameters are in **seconds** (0 = no expiry).
+ */
 @Injectable()
 export class CacheService {
-  private cache: Map<string, { value: any; expiresAt: number }> = new Map();
+  constructor(
+    @Inject(MEMORY_STORE) public readonly memory: KeyvStore,
+    @Optional() @Inject(REDIS_STORE) public readonly redis: Redis | null,
+  ) {}
 
-  set<T>(key: string, value: T, ttlSeconds: number): void {
-    const expiresAt = Date.now() + ttlSeconds * 1000;
-    this.cache.set(key, { value, expiresAt });
+  // ── Memory ───────────────────────────────────────────────────────────────
+
+  /** Write to in-process memory only. */
+  async setMemory<T>(key: string, value: T, ttlSeconds = 0): Promise<void> {
+    await this.memory.set(
+      key,
+      value,
+      ttlSeconds ? ttlSeconds * 1_000 : undefined,
+    );
   }
 
-  get<T>(key: string): T | undefined {
-    const item = this.cache.get(key);
-    
-    if (!item) {
-      return undefined;
+  async getMemory<T>(key: string): Promise<T | undefined> {
+    return this.memory.get<T>(key);
+  }
+
+  async deleteMemory(key: string): Promise<void> {
+    await this.memory.delete(key);
+  }
+
+  async clearMemory(): Promise<void> {
+    await this.memory.clear?.();
+  }
+
+  // ── Redis K/V (JSON-serialised) ───────────────────────────────────────────
+  // For anything beyond simple K/V use `this.redis` (full ioredis API) directly.
+
+  /** Serialise value as JSON and write to Redis with optional EX TTL. */
+  async setRedis<T>(key: string, value: T, ttlSeconds = 0): Promise<void> {
+    if (!this.redis) return;
+    const payload = JSON.stringify(value);
+    if (ttlSeconds) {
+      await this.redis.set(key, payload, 'EX', ttlSeconds);
+    } else {
+      await this.redis.set(key, payload);
     }
-
-    if (Date.now() > item.expiresAt) {
-      this.cache.delete(key);
-      return undefined;
-    }
-
-    return item.value as T;
   }
 
-  delete(key: string): boolean {
-    return this.cache.delete(key);
+  /** Parse JSON value from Redis. Returns undefined on miss or when Redis is absent. */
+  async getRedis<T>(key: string): Promise<T | undefined> {
+    if (!this.redis) return undefined;
+    const raw = await this.redis.get(key);
+    if (raw === null) return undefined;
+    return JSON.parse(raw) as T;
   }
 
-  clear(): void {
-    this.cache.clear();
+  async deleteRedis(key: string): Promise<void> {
+    await this.redis?.del(key);
   }
 
-  has(key: string): boolean {
-    const item = this.cache.get(key);
-    if (!item) return false;
-    if (Date.now() > item.expiresAt) {
-      this.cache.delete(key);
-      return false;
-    }
-    return true;
+  // ── Redis Sets ────────────────────────────────────────────────────────────
+
+  async sadd(key: string, ...members: string[]): Promise<number> {
+    return (await this.redis?.sadd(key, ...members)) ?? 0;
   }
 
-  // Clean up expired entries periodically
-  cleanup(): void {
-    const now = Date.now();
-    for (const [key, item] of this.cache.entries()) {
-      if (now > item.expiresAt) {
-        this.cache.delete(key);
-      }
-    }
+  async srem(key: string, ...members: string[]): Promise<number> {
+    return (await this.redis?.srem(key, ...members)) ?? 0;
+  }
+
+  async sismember(key: string, member: string): Promise<boolean> {
+    if (!this.redis) return false;
+    return (await this.redis.sismember(key, member)) === 1;
+  }
+
+  async smembers(key: string): Promise<string[]> {
+    return (await this.redis?.smembers(key)) ?? [];
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  async expire(key: string, ttlSeconds: number): Promise<void> {
+    await this.redis?.expire(key, ttlSeconds);
+  }
+
+  /** True when a Redis client was successfully provided. */
+  get hasRedis(): boolean {
+    return this.redis !== null;
   }
 }

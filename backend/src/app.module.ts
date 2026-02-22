@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 import {
@@ -15,6 +15,8 @@ import { SharedModule } from './shared/shared.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { HealthModule } from './modules/health/health.module';
+import { BullModule } from '@nestjs/bullmq/dist/bull.module';
+import { PredictionMarketModule } from './modules/prediction-market/prediction-market.module';
 
 // NEW: EVM/Hypercore modules
 import { HypercoreWalletsModule } from './modules/hypercore-wallets/hypercore-wallets.module';
@@ -27,6 +29,7 @@ import { EventsModule } from './events/events.module';
 // Engines modules
 import { MatchmakingModule } from './modules/matchmaking/matchmaking.module';
 import { BattleModule } from './modules/battle/battle.module';
+import { getRedisConnection } from './shared/utils/redis';
 
 // DEPRECATED: Solana/Drift modules - commented out for EVM/Hypercore migration
 // import { AgentWalletsModule } from './modules/drift-agent-wallets/drift-agent-wallets.module';
@@ -46,6 +49,14 @@ import { BattleModule } from './modules/battle/battle.module';
       ],
       envFilePath: ['.env', '.env.local'],
       validationSchema: appEnvSchema,
+    }),
+
+    // Register BullMQ with main app process (main app will be producer)
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        getRedisConnection(configService),
     }),
 
     // Rate limiting
@@ -79,6 +90,7 @@ import { BattleModule } from './modules/battle/battle.module';
     AuthModule,
     UsersModule,
     HealthModule,
+    PredictionMarketModule,
 
     // NEW: EVM/Hypercore modules
     HypercoreWalletsModule,
