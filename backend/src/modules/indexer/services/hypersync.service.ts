@@ -1,73 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IndexerConfig } from '@config/indexer.config';
-import { LoggerService } from '@shared/logger/logger.service';
-
-export interface HyperSyncRawLog {
-  blockNumber: number;
-  address: string;
-  topic0: string;
-  topic1: string | null;
-  topic2: string | null;
-  topic3: string | null;
-  data: string;
-  transactionHash: string;
-  logIndex: number;
-  timestamp: number; // block timestamp, injected after query
-  /** Raw hex input of the transaction that emitted this log (0x-prefixed). */
-  transactionInput?: string;
-}
-
-interface HyperSyncApiLog {
-  block_number: number;
-  address: string;
-  topic0: string;
-  topic1?: string | null;
-  topic2?: string | null;
-  topic3?: string | null;
-  data: string;
-  transaction_hash: string;
-  log_index: number;
-}
-
-interface HyperSyncApiBlock {
-  number: number;
-  timestamp: number;
-}
-
-interface HyperSyncApiTransaction {
-  hash: string;
-  input: string;
-}
-
-interface HyperSyncQueryResponse {
-  archive_height: number | null;
-  next_block: number;
-  data: {
-    logs?: HyperSyncApiLog[];
-    blocks?: HyperSyncApiBlock[];
-    transactions?: HyperSyncApiTransaction[];
-  };
-}
-
-type HyperSyncHeightResponse = { height: number };
-
-/** A single (contract-set, topic0) pair passed to a multi-event query. */
-export interface LogFilter {
-  /** One or more emitting contract addresses (OR-ed by HyperSync). */
-  contractAddresses: string[];
-  topic0: string;
-}
+import {
+  HyperSyncHeightResponse,
+  HyperSyncQueryResponse,
+  HyperSyncRawLog,
+} from '../dto/hypersync.dto';
+import { LogFilter } from '../types/log.type';
 
 @Injectable()
 export class HypersyncService {
+  private readonly logger = new Logger(HypersyncService.name);
   private readonly baseUrl: string;
   private readonly apiToken: string;
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly logger: LoggerService,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     const cfg = this.configService.get<IndexerConfig>('indexer')!;
     this.baseUrl = cfg.hypersyncUrl.replace(/\/$/, '');
     this.apiToken = cfg.apiToken;
@@ -144,12 +91,13 @@ export class HypersyncService {
     }
 
     const body = (await resp.json()) as HyperSyncQueryResponse;
-    const rawLogs = body.data.logs ?? [];
-    const rawBlocks = body.data.blocks ?? [];
+    const pages = body.data ?? [];
+    const rawLogs = pages.flatMap((p) => p.logs ?? []);
+    const rawBlocks = pages.flatMap((p) => p.blocks ?? []);
 
-    // Build block number → timestamp lookup
+    // Build block number → timestamp lookup (timestamps may be hex strings)
     const blockTimestamps = new Map<number, number>(
-      rawBlocks.map((b) => [b.number, b.timestamp]),
+      rawBlocks.map((b) => [b.number, Number(BigInt(b.timestamp))]),
     );
 
     const logs: HyperSyncRawLog[] = rawLogs.map((l) => ({
@@ -224,12 +172,22 @@ export class HypersyncService {
     }
 
     const body = (await resp.json()) as HyperSyncQueryResponse;
-    const rawLogs = body.data.logs ?? [];
-    const rawBlocks = body.data.blocks ?? [];
-    const rawTxs = body.data.transactions ?? [];
+    this.logger.verbose(
+      `HyperSync multi response:\n${JSON.stringify(body, null, 2)}`,
+    );
+    const pages = body.data ?? [];
+    const rawLogs = [];
+    const rawBlocks = [];
+    const rawTxs = [];
+    for (const page of pages) {
+      if (page.logs) rawLogs.push(...page.logs);
+      if (page.blocks) rawBlocks.push(...page.blocks);
+      if (page.transactions) rawTxs.push(...page.transactions);
+    }
 
+    // Timestamps may arrive as hex strings (e.g. "0x699b58b3")
     const blockTimestamps = new Map<number, number>(
-      rawBlocks.map((b) => [b.number, b.timestamp]),
+      rawBlocks.map((b) => [b.number, Number(BigInt(b.timestamp))]),
     );
     const txInputs = new Map<string, string>(
       rawTxs.map((tx) => [tx.hash.toLowerCase(), tx.input]),
@@ -252,6 +210,12 @@ export class HypersyncService {
     this.logger.debug(
       `HyperSync multi: [${fromBlock}-${toBlock}] ${filters.length} filter(s) → ${logs.length} logs`,
     );
+
+    if (logs.length > 0) {
+      this.logger.verbose(
+        'HOLY SHIT WE GOT LOGS:\n' + JSON.stringify(logs, null, 2),
+      );
+    }
 
     return logs;
   }

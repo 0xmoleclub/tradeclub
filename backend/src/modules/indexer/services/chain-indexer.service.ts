@@ -11,11 +11,9 @@ import { AbiCoder, WebSocketProvider } from 'ethers';
 import { keccak256, toBytes } from 'viem';
 import { IndexerConfig } from '@config/indexer.config';
 import { ChainConfig } from '@config/chain.config';
-import {
-  HypersyncService,
-  HyperSyncRawLog,
-  LogFilter,
-} from './hypersync.service';
+import { HyperSyncRawLog } from '../dto/hypersync.dto';
+import { HypersyncService } from './hypersync.service';
+import { LogFilter } from '../types/log.type';
 import { IndexerStateService } from './indexer-state.service';
 import { INDEXER_QUEUE_PREDICTION_MARKET } from '../constants/indexer-queue.constants';
 import { CACHE_KEY_MARKET_ADDRESSES } from '../constants/indexer-cache.constants';
@@ -141,7 +139,7 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
       contractAddress: contracts.marketFactory.toLowerCase(),
       topic0: MARKET_CREATED_TOPIC0,
       handle: async (log) => {
-        const job = this.decodeMarketCreated(log);
+        const job = this.decodeMarketCreatedLog(log);
         if (!job) return;
         await this.predictionMarketQueue.add(
           INDEXER_PREDICTION_JOB.HANDLE_MARKET_CREATED,
@@ -189,7 +187,7 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
   // ── WebSocket management ──────────────────────────────────────────────────
 
   private async connectWebSocket(): Promise<void> {
-    const wsUrl = this.indexerCfg.hyperRpcWssUrl;
+    const wsUrl = this.indexerCfg.wssRpcUrl;
     try {
       this.provider = new WebSocketProvider(wsUrl);
 
@@ -201,7 +199,7 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.provider.websocket as any).addEventListener?.('close', () => {
-        this.logger.warn('HyperSync WS closed — will reconnect…');
+        this.logger.warn('WSS RPC connection closed — will reconnect…');
         void this.scheduleReconnect();
       });
 
@@ -263,6 +261,14 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
         contractAddresses: [h.contractAddress!],
         topic0: h.topic0,
       }));
+    this.logger.log(
+      'Static filters: ' +
+        staticFilters
+          .map((f) => {
+            return `topic0=${f.topic0}, contractAddresses=[${f.contractAddresses.join(', ')}]`;
+          })
+          .join(', '),
+    );
 
     // Dynamic Trade filters — one filter covering all known market addresses
     const marketAddresses = await this.cacheService.smembers(
@@ -288,7 +294,7 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.logger.log(`Indexing events [${fromBlock}–${headBlock}]`);
+    this.logger.debug(`Indexing events [${fromBlock}–${headBlock}]`);
 
     let current = fromBlock;
     while (current <= headBlock) {
@@ -314,7 +320,9 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
 
   // ── Decoders (one per event type) ─────────────────────────────────────────
 
-  private decodeMarketCreated(log: HyperSyncRawLog): MarketCreatedJob | null {
+  private decodeMarketCreatedLog(
+    log: HyperSyncRawLog,
+  ): MarketCreatedJob | null {
     try {
       // Indexed: topic1 = matchId (bytes32), topic2 = market (address)
       if (!log.topic1 || !log.topic2) {
@@ -324,18 +332,20 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
         return null;
       }
 
-      const matchId = BigInt(log.topic1).toString();
+      const matchId = BigInt(log.topic1).toString().replace(/^0x/, '');
       const market = `0x${log.topic2.slice(-40)}`;
 
       // Non-indexed: data = abi.encode(uint8 outcomesCount, uint256 b, uint16 feeBps)
       const coder = AbiCoder.defaultAbiCoder();
-      const [outcomesCount, b, feeBps] = coder.decode(
-        ['uint8', 'uint256', 'uint16'],
+      let [questionId, outcomesCount, b, feeBps] = coder.decode(
+        ['bytes32', 'uint8', 'uint256', 'uint16'],
         log.data,
       );
+      questionId = String(questionId).replace(/^0x/, '');
 
       return {
         matchId,
+        questionId,
         market,
         outcomesCount: Number(outcomesCount),
         b: Number(b),

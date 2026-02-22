@@ -78,21 +78,7 @@ export class PredictionIndexerProcessor extends WorkerHost {
       return;
     }
 
-    // Find the BattleResult for this outcome index
     await this.prisma.$transaction(async (trx) => {
-      const battleResult = await trx.battleResult.findFirst({
-        where: { battleId },
-        orderBy: { createdAt: 'asc' },
-        skip: outcome, // outcome index 0 = first result, 1 = second, etc.
-        select: { id: true },
-      });
-      if (!battleResult) {
-        this.logger.warn(
-          `No BattleResult found for battleId=${battleId} outcome=${outcome} — skipping trade tx=${txHash}`,
-        );
-        return;
-      }
-
       // USD tokens has 6 decimals — convert raw cost to decimal USD
       const USD_DECIMALS = new Prisma.Decimal(1_000_000);
       const costDecimal = new Prisma.Decimal(cost).div(USD_DECIMALS);
@@ -104,6 +90,24 @@ export class PredictionIndexerProcessor extends WorkerHost {
         outcome,
       );
 
+      const question = await trx.battlePredictionQuestion.update({
+        where: { marketAddress },
+        data: {
+          volume: { increment: costDecimal },
+          shares: isBuy
+            ? { increment: sharesDecimal }
+            : { decrement: sharesDecimal },
+          size: isBuy ? { increment: costDecimal } : { decrement: costDecimal },
+        },
+      });
+
+      if (!question) {
+        this.logger.error(
+          `No BattlePredictionQuestion found for marketAddress=${marketAddress} — skipping trade tx=${txHash}`,
+        );
+        throw new Error('BattlePredictionQuestion not found for trade event');
+      }
+
       await trx.battlePredictionTrade.create({
         data: {
           txHash,
@@ -114,19 +118,22 @@ export class PredictionIndexerProcessor extends WorkerHost {
           costUsd: costDecimal,
           userAddress: trader,
           battleId,
-          battleResultId: battleResult.id,
+          battlePredictionQuestionId: question.id,
+          marketAddress,
         },
       });
 
       await trx.battlePredictionChoice.upsert({
         where: {
-          battleId_outcome: {
+          battleId_battlePredictionQuestionId_outcome: {
             battleId: battleId,
+            battlePredictionQuestionId: question.id,
             outcome,
           },
         },
         create: {
           battleId,
+          battlePredictionQuestionId: question.id,
           outcome,
           price: latestPriceDecimal,
           volume: costDecimal,
@@ -142,6 +149,7 @@ export class PredictionIndexerProcessor extends WorkerHost {
           size: isBuy ? { increment: costDecimal } : { decrement: costDecimal },
         },
       });
+
       this.logger.log(
         `Persisted Trade: battleId=${battleId}, outcome=${outcome}, ` +
           `${isBuy ? 'BUY' : 'SELL'} ${shares} shares @ ${latestPriceDecimal.toFixed(6)} USDC`,
@@ -150,13 +158,12 @@ export class PredictionIndexerProcessor extends WorkerHost {
   }
 
   private async handleMarketCreated(job: Job<MarketCreatedJob>): Promise<void> {
-    const {
+    let {
       matchId,
+      questionId,
       market, // contract address
       outcomesCount,
-      b,
       feeBps,
-      timestamp,
       blockNumber,
     } = job.data;
 
@@ -165,7 +172,6 @@ export class PredictionIndexerProcessor extends WorkerHost {
         `outcomesCount=${outcomesCount}, feeBps=${feeBps}, block=${blockNumber}`,
     );
 
-    const matchIdUUID: string = this.toMatchIdBytes16(matchId);
     const marketAddress: string = normalizeEvmAddress(market);
 
     // Persist market address to the known-markets set (used by chain-indexer
@@ -175,18 +181,25 @@ export class PredictionIndexerProcessor extends WorkerHost {
     // Cache market address → battleId for Trade event processor lookups
     await this.cacheService.setRedis(
       cacheKeyMarketBattleId(marketAddress),
-      matchIdUUID,
+      matchId,
     );
-  }
 
-  /**
-   *
-   * Convert a bytes32-padded match ID back to the original 16-byte UUID string.
-   * @param matchIdBytes32
-   * @returns
-   */
-  private toMatchIdBytes16(matchIdBytes32: string): string {
-    // Remove 0x prefix and take the last 32 characters (16 bytes)
-    return matchIdBytes32.replace(/^0x/, '').slice(-32);
+    await this.prisma.battlePredictionQuestion.upsert({
+      where: {
+        id: questionId,
+        battleId: matchId,
+      },
+      create: {
+        id: questionId,
+        battleId: matchId,
+        marketAddress,
+        questionText: 'Who will win the battle?',
+        description:
+          'Predict which player will win the battle based on who has the highest PnL at the end.',
+      },
+      update: {
+        marketAddress,
+      },
+    });
   }
 }
