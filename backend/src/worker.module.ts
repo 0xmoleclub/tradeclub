@@ -10,7 +10,6 @@ import {
 import { workerEnvSchema } from '@config/validation/worker.schema';
 import { DatabaseModule } from '@/database/database.module';
 import { SharedModule } from '@shared/shared.module';
-import { ChainServicesModule } from '@modules/chain-services/chain-services.module';
 import { IndexerModule } from '@modules/indexer/indexer.module';
 import { getRedisConnection } from '@shared/utils/redis';
 
@@ -30,7 +29,6 @@ import { getRedisConnection } from '@shared/utils/redis';
     }),
     DatabaseModule,
     SharedModule,
-    ChainServicesModule,
     IndexerModule,
   ],
 })

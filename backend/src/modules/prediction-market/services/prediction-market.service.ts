@@ -1,17 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { ConfigService } from '@nestjs/config';
-import { LoggerService } from '@shared/logger/logger.service';
-import { ChainServiceRegistry } from '@/modules/chain-services/chain-service-registry';
 import {
   CreateMarketJob,
   PREDICTION_MARKET_JOBS,
   ProposeOutcomeJob,
 } from '../types/prediction-job.type';
-import { EvmCryptoService } from '@modules/hypercore-wallets/services';
 import { Queue } from 'bullmq';
 import { CONTRACT_CALL_QUEUE } from '../constants/queues.constants';
-import { INDEXER_QUEUE_PREDICTION_MARKET } from '@/modules/indexer/constants/indexer-queue.constants';
 
 @Injectable()
 export class PredictionMarketService {

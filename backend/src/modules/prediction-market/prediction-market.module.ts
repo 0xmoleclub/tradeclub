@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EvmCryptoService } from '@/modules/hypercore-wallets/services';
-import { ChainServicesModule } from '@/modules/chain-services/chain-services.module';
-import { PredictionMarketService } from './services/evm-prediction-market.service';
-import { PredictionMarketContractService } from './services/prediction-market-contract.service';
+import { PredictionMarketService } from './services/prediction-market.service';
+import { PredictionContractService } from './services/prediction-contract.service';
 import { BullModule } from '@nestjs/bullmq';
 import { CONTRACT_CALL_QUEUE } from './constants/queues.constants';
 import { PredictionContractProcessor } from './processors/prediction-contract.processor';
@@ -12,7 +11,6 @@ import { INDEXER_QUEUE_PREDICTION_MARKET } from '@modules/indexer/constants/inde
 @Module({
   imports: [
     ConfigModule,
-    ChainServicesModule,
     BullModule.registerQueue({
       name: CONTRACT_CALL_QUEUE,
       defaultJobOptions: {
@@ -36,8 +34,8 @@ import { INDEXER_QUEUE_PREDICTION_MARKET } from '@modules/indexer/constants/inde
     PredictionMarketService,
     EvmCryptoService,
     PredictionContractProcessor,
-    PredictionMarketContractService,
+    PredictionContractService,
   ],
-  exports: [PredictionMarketService, PredictionMarketContractService],
+  exports: [PredictionMarketService, PredictionContractService],
 })
 export class PredictionMarketModule {}

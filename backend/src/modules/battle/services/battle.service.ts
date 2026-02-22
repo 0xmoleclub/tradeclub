@@ -13,8 +13,7 @@ import { CreateBattleResultDto } from '../dto';
 import { BattlePlayerService } from './battle-player.service';
 import { buildRanking } from '../utils/ranking.util';
 import { computeEloDelta } from '../utils/elo.util';
-import { ChainServiceFactory } from '@/modules/chain-services/chain-service-factory';
-import { PredictionMarketService } from '@/modules/prediction-market/services/prediction-market.service';
+import { PredictionMarketService } from '@modules/prediction-market/services/prediction-market.service';
 
 // ORCHESTRATOR SERVICE FOR BATTLE LIFECYCLE
 
@@ -24,7 +23,7 @@ export class BattleService {
     private readonly player: BattlePlayerService,
     private readonly prisma: PrismaService,
     private readonly logger: LoggerService,
-    private readonly chainFactory: ChainServiceFactory,
+    private readonly predictionMarketService: PredictionMarketService,
   ) {}
 
   /**
@@ -77,12 +76,10 @@ export class BattleService {
     }
 
     try {
-      await this.chainFactory
-        .getCurrent(PredictionMarketService)
-        .enqueueCreateMarket({
-          battleId: battle.id,
-          matchId: match.matchId,
-        });
+      await this.predictionMarketService.enqueueCreateMarket({
+        battleId: battle.id,
+        matchId: match.matchId,
+      });
     } catch (error) {
       this.logger.error(
         `Failed to enqueue market creation for match ${match.matchId}`,
@@ -313,15 +310,13 @@ export class BattleService {
     // If a battle has N players (N slots), the first N outcomes in prediction market contract
     // respectively corresponds to the prediction of each player winning
     const outcome = ranking[0].slot - 1;
-    await this.chainFactory
-      .getCurrent(PredictionMarketService)
-      .enqueueProposeOutcome({
-        battleId,
-        matchId,
-        outcome,
-        dataHash: dto.dataHash,
-        codeCommitHash: dto.codeCommitHash,
-      });
+    await this.predictionMarketService.enqueueProposeOutcome({
+      battleId,
+      matchId,
+      outcome,
+      dataHash: dto.dataHash,
+      codeCommitHash: dto.codeCommitHash,
+    });
   }
 }
-    // respectively correspond to the prediction of each player winning
+// respectively correspond to the prediction of each player winning

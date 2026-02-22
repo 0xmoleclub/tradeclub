@@ -26,7 +26,7 @@ const PREDICTION_MARKET_ABI = [
 const USDC_DECIMALS = new Prisma.Decimal(1_000_000);
 
 @Injectable()
-export class PredictionMarketContractService {
+export class PredictionContractService {
   private readonly provider: JsonRpcProvider;
 
   constructor(

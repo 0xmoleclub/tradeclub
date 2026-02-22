@@ -9,14 +9,14 @@ import {
   PREDICTION_MARKET_JOBS,
   ProposeOutcomeJob,
 } from '../types/prediction-job.type';
-import { PredictionMarketContractService } from '../services/prediction-market-contract.service';
+import { PredictionContractService } from '../services/prediction-contract.service';
 
 @Processor(CONTRACT_CALL_QUEUE)
 export class PredictionContractProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly logger: LoggerService,
-    private readonly contractService: PredictionMarketContractService,
+    private readonly contractService: PredictionContractService,
   ) {
     super();
   }
