@@ -50,10 +50,10 @@ model User {
   updatedAt DateTime @updatedAt
 
   // EVM wallet address (primary for Hypercore/Hyperliquid)
-  evmAddress    String?    @unique
+  evmAddress String? @unique
 
-  nonce         String?
-  lastLoginAt   DateTime?
+  nonce       String?
+  lastLoginAt DateTime?
 
   // Profile
   name   String?
@@ -62,12 +62,12 @@ model User {
   status UserStatus @default(ACTIVE)
 
   // Match Making
-  elo Int @default(1000)
+  elo        Int @default(1000)
   rankPoints Int @default(0)
 
   // Relations
   hypercoreWallet HypercoreWallet? @relation("HypercoreWallet")
-  battlePlayers	  BattlePlayer[]
+  battlePlayers   BattlePlayer[]
 
   @@index([elo])
 }
@@ -82,11 +82,11 @@ model HypercoreWallet {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade, name: "HypercoreWallet")
 
   // Agent wallet details
-  agentAddress        String @unique  // Agent's public address (identifier on Hyperliquid)
-  encryptedAgentKey   String          // Encrypted private key for signing orders
-  masterAddress       String?         // Optional: user's master wallet (for reference)
+  agentAddress      String  @unique // Agent's public address (identifier on Hyperliquid)
+  encryptedAgentKey String // Encrypted private key for signing orders
+  masterAddress     String? // Optional: user's master wallet (for reference)
 
-  encryptionVersion   String   @default("v1")
+  encryptionVersion String @default("v1")
 
   @@index([userId])
   @@index([agentAddress])
@@ -97,32 +97,37 @@ model Battle {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  status     BattleStatus  @default(MATCHING)
-  maxPlayers Int           @default(4)
+  status     BattleStatus @default(MATCHING)
+  maxPlayers Int          @default(4)
 
   startedAt DateTime?
   endedAt   DateTime?
 
   metadata Json?
 
+  intendedDurationMs Int  @default(3600000) // Duration of the battle in miliseconds 
+  actualDurationMs   Int? // Actual duration of the battle in miliseconds (written when battle finishes)
+
   // Relations
-  players BattlePlayer[]
-  results BattleResult[]
+  players                 BattlePlayer[]
+  results                 BattleResult[]
+  battlePredictionChoices BattlePredictionChoice[]
+  battlePredictionTxs     BattlePredictionTrade[]
 }
 
 model BattlePlayer {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
 
-  battleId  String
-  battle    Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  battleId String
+  battle   Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
 
-  userId    String
-  user      User   @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  status BattlePlayerStatus @default(JOINED)
-  slot Int // 1 -> 4 Player position
-  joinedAt DateTime @default(now())
+  status     BattlePlayerStatus @default(JOINED)
+  slot       Int // 1 -> 4 Player position
+  joinedAt   DateTime           @default(now())
   finishedAt DateTime?
 
   // Snapshot at match time
@@ -152,7 +157,8 @@ model BattleResult {
   // Traceability
   codeCommitHash String
 
-  dataPoints BattleResultData[]
+  dataPoints          BattleResultData[]
+  battlePredictionTxs BattlePredictionTrade[]
 
   @@index([battleId])
 }
@@ -164,10 +170,52 @@ model BattleResultData {
   battleResultId String
   battleResult   BattleResult @relation(fields: [battleResultId], references: [id], onDelete: Cascade)
 
-  metric MetricType
+  metric     MetricType
   playerSlot Int // 1 → 4
-  value Decimal @db.Decimal(38, 18)
+  value      Decimal    @db.Decimal(38, 18)
 
   @@unique([battleResultId, metric, playerSlot])
   @@index([metric])
+}
+
+model BattlePredictionChoice {
+  id        String   @id @default(uuid())
+  shares    Decimal  @default(0) @db.Decimal(38, 18)
+  volume    Decimal  @default(0) @db.Decimal(38, 18)
+  size      Decimal  @default(0) @db.Decimal(38, 18)
+  price     Decimal  @default(0) @db.Decimal(38, 18)
+  createdAt DateTime @default(now())
+
+  battleId String
+
+  battle  Battle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  outcome Int // 0 = first result, 1 = second, etc.
+
+  @@unique([battleId, outcome])
+}
+
+enum PredictionTradeType {
+  BUY
+  SELL
+}
+
+model BattlePredictionTrade {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  txHash      String
+  blockNumber Int
+  type        PredictionTradeType
+  shares      Decimal             @default(0) @db.Decimal(38, 18)
+  priceUsd    Decimal             @default(0) @db.Decimal(38, 18)
+  costUsd     Decimal             @default(0) @db.Decimal(38, 18)
+  userAddress String
+
+  battleId       String
+  battleResultId String
+
+  battle       Battle       @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  battleResult BattleResult @relation(fields: [battleResultId], references: [id], onDelete: Cascade)
+
+  @@map("BattlePredictionOrder")
 }
