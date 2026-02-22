@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/database/prisma.service';
 import { LoggerService } from '@shared/logger/logger.service';
 import { CacheService } from '@shared/cache/cache.service';
-import { PredictionMarketContractService } from '@modules/prediction-market/services/prediction-market-contract.service';
+import { PredictionContractService } from '@/modules/prediction-market/services/prediction-contract.service';
 import { INDEXER_QUEUE_PREDICTION_MARKET } from '../constants/indexer-queue.constants';
 import {
   CACHE_KEY_MARKET_ADDRESSES,
@@ -33,7 +33,7 @@ export class PredictionIndexerProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly logger: LoggerService,
     private readonly cacheService: CacheService,
-    private readonly contractService: PredictionMarketContractService,
+    private readonly contractService: PredictionContractService,
   ) {
     super();
   }
