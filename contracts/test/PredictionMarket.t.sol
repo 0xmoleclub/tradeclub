@@ -1,20 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import {Test} from 'forge-std/Test.sol';
 
-import {PredictionMarket} from "../contracts/PredictionMarket.sol";
+import {PredictionMarket} from '../contracts/PredictionMarket.sol';
 
 contract MockUSDC {
-    string public name = "MockUSDC";
-    string public symbol = "mUSDC";
+    string public name = 'MockUSDC';
+    string public symbol = 'mUSDC';
     uint8 public decimals = 6;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
 
     function mint(address to, uint256 amount) external {
         balanceOf[to] += amount;
@@ -32,16 +36,20 @@ contract MockUSDC {
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool) {
         uint256 currentAllowance = allowance[from][msg.sender];
-        require(currentAllowance >= amount, "allowance");
+        require(currentAllowance >= amount, 'allowance');
         allowance[from][msg.sender] = currentAllowance - amount;
         _transfer(from, to, amount);
         return true;
     }
 
     function _transfer(address from, address to, uint256 amount) internal {
-        require(balanceOf[from] >= amount, "balance");
+        require(balanceOf[from] >= amount, 'balance');
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
         emit Transfer(from, to, amount);
@@ -79,15 +87,16 @@ contract PredictionMarketTest is Test {
 
     function _deployMarket(uint16 feeBps) internal returns (PredictionMarket) {
         PredictionMarket market = new PredictionMarket();
-        PredictionMarket.MarketConfig memory config = PredictionMarket.MarketConfig({
-            matchId: keccak256("match-1"),
-            usdc: address(usdc),
-            matchSettlement: address(settlement),
-            feeCollector: feeCollector,
-            feeBps: feeBps,
-            bScore: B_SCORE,
-            outcomesCount: 2
-        });
+        PredictionMarket.MarketConfig memory config = PredictionMarket
+            .MarketConfig({
+                matchId: bytes16(keccak256('match-1')),
+                usdc: address(usdc),
+                matchSettlement: address(settlement),
+                feeCollector: feeCollector,
+                feeBps: feeBps,
+                bScore: B_SCORE,
+                outcomesCount: 2
+            });
         market.initialize(config);
         return market;
     }

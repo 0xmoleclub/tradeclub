@@ -10,7 +10,7 @@ import type { TypedContractEvent, TypedDeferredTopicFilter, TypedEventLog, Typed
 
     getEvent(nameOrSignatureOrTopic: "FeeCollectorUpdated" | "ImplementationUpdated" | "MarketCreated" | "OwnershipTransferred"): EventFragment;
 
-    encodeFunctionData(functionFragment: 'createMarket', values: [BytesLike, BigNumberish, BigNumberish, BigNumberish]): string;
+    encodeFunctionData(functionFragment: 'createMarket', values: [BytesLike, BytesLike, BigNumberish, BigNumberish, BigNumberish]): string;
 encodeFunctionData(functionFragment: 'feeCollector', values?: undefined): string;
 encodeFunctionData(functionFragment: 'implementation', values?: undefined): string;
 encodeFunctionData(functionFragment: 'matchSettlement', values?: undefined): string;
@@ -59,9 +59,9 @@ decodeFunctionResult(functionFragment: 'usdc', data: BytesLike): Result;
   
 
     export namespace MarketCreatedEvent {
-      export type InputTuple = [matchId: BytesLike, market: AddressLike, outcomesCount: BigNumberish, b: BigNumberish, feeBps: BigNumberish];
-      export type OutputTuple = [matchId: string, market: string, outcomesCount: bigint, b: bigint, feeBps: bigint];
-      export interface OutputObject {matchId: string, market: string, outcomesCount: bigint, b: bigint, feeBps: bigint };
+      export type InputTuple = [matchId: BytesLike, market: AddressLike, questionId: BytesLike, outcomesCount: BigNumberish, b: BigNumberish, feeBps: BigNumberish];
+      export type OutputTuple = [matchId: string, market: string, questionId: string, outcomesCount: bigint, b: bigint, feeBps: bigint];
+      export interface OutputObject {matchId: string, market: string, questionId: string, outcomesCount: bigint, b: bigint, feeBps: bigint };
       export type Event = TypedContractEvent<InputTuple, OutputTuple, OutputObject>
       export type Filter = TypedDeferredTopicFilter<Event>
       export type Log = TypedEventLog<Event>
@@ -117,7 +117,7 @@ decodeFunctionResult(functionFragment: 'usdc', data: BytesLike): Result;
     
     
     createMarket: TypedContractMethod<
-      [matchId: BytesLike, outcomesCount: BigNumberish, bScore: BigNumberish, feeBps: BigNumberish, ],
+      [matchId: BytesLike, questionId: BytesLike, outcomesCount: BigNumberish, bScore: BigNumberish, feeBps: BigNumberish, ],
       [string],
       'nonpayable'
     >
@@ -199,7 +199,7 @@ decodeFunctionResult(functionFragment: 'usdc', data: BytesLike): Result;
     getFunction<T extends ContractMethod = ContractMethod>(key: string | FunctionFragment): T;
 
     getFunction(nameOrSignature: 'createMarket'): TypedContractMethod<
-      [matchId: BytesLike, outcomesCount: BigNumberish, bScore: BigNumberish, feeBps: BigNumberish, ],
+      [matchId: BytesLike, questionId: BytesLike, outcomesCount: BigNumberish, bScore: BigNumberish, feeBps: BigNumberish, ],
       [string],
       'nonpayable'
     >;
@@ -264,7 +264,7 @@ getEvent(key: 'OwnershipTransferred'): TypedContractEvent<OwnershipTransferredEv
       ImplementationUpdated: TypedContractEvent<ImplementationUpdatedEvent.InputTuple, ImplementationUpdatedEvent.OutputTuple, ImplementationUpdatedEvent.OutputObject>;
     
 
-      'MarketCreated(bytes32,address,uint8,uint256,uint16)': TypedContractEvent<MarketCreatedEvent.InputTuple, MarketCreatedEvent.OutputTuple, MarketCreatedEvent.OutputObject>;
+      'MarketCreated(bytes16,address,bytes16,uint8,uint256,uint16)': TypedContractEvent<MarketCreatedEvent.InputTuple, MarketCreatedEvent.OutputTuple, MarketCreatedEvent.OutputObject>;
       MarketCreated: TypedContractEvent<MarketCreatedEvent.InputTuple, MarketCreatedEvent.OutputTuple, MarketCreatedEvent.OutputObject>;
     
 

@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {UD60x18, ud} from "@prb/math/src/UD60x18.sol";
+import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import {ReentrancyGuard} from '@openzeppelin/contracts/utils/ReentrancyGuard.sol';
+import {UD60x18, ud} from '@prb/math/src/UD60x18.sol';
 
-import {IMatchSettlement} from "./interfaces/IMatchSettlement.sol";
+import {IMatchSettlement} from './interfaces/IMatchSettlement.sol';
 
 contract PredictionMarket is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct MarketConfig {
-        bytes32 matchId;
+        bytes16 matchId;
         address usdc;
         address matchSettlement;
         address feeCollector;
@@ -29,7 +29,7 @@ contract PredictionMarket is ReentrancyGuard {
     error Slippage();
 
     bool public initialized;
-    bytes32 public matchId;
+    bytes16 public matchId;
     IERC20 public usdc;
     IMatchSettlement public matchSettlement;
     address public feeCollector;
@@ -43,7 +43,7 @@ contract PredictionMarket is ReentrancyGuard {
     uint256 private constant WAD_TO_USDC = 1e12;
 
     event Initialized(
-        bytes32 matchId,
+        bytes16 matchId,
         address usdc,
         address matchSettlement,
         address feeCollector,

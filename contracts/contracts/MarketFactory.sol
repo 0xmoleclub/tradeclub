@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Clones} from '@openzeppelin/contracts/proxy/Clones.sol';
+import {Ownable} from '@openzeppelin/contracts/access/Ownable.sol';
 
-import {PredictionMarket} from "./PredictionMarket.sol";
+import {PredictionMarket} from './PredictionMarket.sol';
 
 contract MarketFactory is Ownable {
     address public implementation;
@@ -15,8 +15,9 @@ contract MarketFactory is Ownable {
     event ImplementationUpdated(address indexed implementation);
     event FeeCollectorUpdated(address indexed feeCollector);
     event MarketCreated(
-        bytes32 indexed matchId,
+        bytes16 indexed matchId,
         address indexed market,
+        bytes16 questionId,
         uint8 outcomesCount,
         uint256 b,
         uint16 feeBps
@@ -46,7 +47,8 @@ contract MarketFactory is Ownable {
     }
 
     function createMarket(
-        bytes32 matchId,
+        bytes16 matchId,
+        bytes16 questionId,
         uint8 outcomesCount,
         uint256 bScore,
         uint16 feeBps
@@ -66,7 +68,14 @@ contract MarketFactory is Ownable {
 
         PredictionMarket(clone).initialize(config);
 
-        emit MarketCreated(matchId, clone, outcomesCount, bScore, feeBps);
+        emit MarketCreated(
+            matchId,
+            clone,
+            questionId,
+            outcomesCount,
+            bScore,
+            feeBps
+        );
         return clone;
     }
 }

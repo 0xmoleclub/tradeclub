@@ -370,7 +370,7 @@ getEvent(key: 'Trade'): TypedContractEvent<TradeEvent.InputTuple, TradeEvent.Out
 
     filters: {
       
-      'Initialized(bytes32,address,address,address,uint16,uint256,uint8)': TypedContractEvent<InitializedEvent.InputTuple, InitializedEvent.OutputTuple, InitializedEvent.OutputObject>;
+      'Initialized(bytes16,address,address,address,uint16,uint256,uint8)': TypedContractEvent<InitializedEvent.InputTuple, InitializedEvent.OutputTuple, InitializedEvent.OutputObject>;
       Initialized: TypedContractEvent<InitializedEvent.InputTuple, InitializedEvent.OutputTuple, InitializedEvent.OutputObject>;
     
 
