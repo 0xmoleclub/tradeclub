@@ -1,19 +1,19 @@
+/* Based on https://github.com/tsconfig/bases/blob/501da2bcd640cf95c95805783e1012b992338f28/bases/node22.json */
 {
   "compilerOptions": {
-    "target": "es2020",
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
+    "lib": ["es2023"],
+    "module": "node16",
+    "target": "es2022",
     "strict": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "types": ["node", "hardhat"],
-    "baseUrl": "."
+    "moduleResolution": "node16",
+    "outDir": "dist"
   },
-  "include": [
+    "include": [
     "./artifacts",
     "./scripts",
+    "./scripts-hardhat",
     "./test",
     "./ignition",
     "./hardhat.config.ts",
