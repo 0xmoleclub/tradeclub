@@ -4,7 +4,7 @@ export interface IndexerConfig {
   hypersyncUrl: string;
   hyperRpcUrl: string;
   /** WebSocket RPC endpoint for real-time block subscriptions */
-  hyperRpcWssUrl: string;
+  wssRpcUrl: string;
   apiToken: string;
   /** How often to poll as a WS fallback (ms) */
   fallbackPollIntervalMs: number;
@@ -22,10 +22,10 @@ export const indexerConfig = registerAs(
     hyperRpcUrl:
       process.env.INDEXER_HYPERRPC_URL ||
       'https://arbitrum-sepolia.rpc.hypersync.xyz',
-    hyperRpcWssUrl:
-      process.env.INDEXER_HYPERRPC_WSS_URL ||
-      'wss://arbitrum-sepolia.rpc.hypersync.xyz',
-    apiToken: process.env.ENVIO_API_TOKEN || '',
+    wssRpcUrl:
+      process.env.INDEXER_WSS_RPC_URL ||
+      'whttps://api.zan.top/arb-sepolia',
+    apiToken: process.env.ENVIO_API_TOKEN!,
     fallbackPollIntervalMs: parseInt(
       process.env.INDEXER_FALLBACK_POLL_INTERVAL_MS || '30000',
       10,

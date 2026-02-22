@@ -28,13 +28,15 @@ export const chainConfig = registerAs(
     current: (process.env.CHAIN_CURRENT as ChainKey) || 'evm-local',
     evm: {
       chainId: parseInt(process.env.EVM_CHAIN_ID || '1', 10),
-      rpcUrl: process.env.EVM_RPC_URL || '',
-      operatorKey: process.env.EVM_OPERATOR_KEY || '',
+      rpcUrl:
+        process.env.EVM_RPC_URL ||
+        'https://arbitrum-sepolia-testnet.api.pocket.network',
+      operatorKey: process.env.EVM_OPERATOR_KEY!,
       contracts: {
-        marketFactory: process.env.EVM_MARKET_FACTORY || '',
-        matchSettlement: process.env.EVM_MATCH_SETTLEMENT || '',
-        stablecoin: process.env.EVM_STABLECOIN || '',
-        feeCollector: process.env.EVM_FEE_COLLECTOR || '',
+        marketFactory: process.env.EVM_MARKET_FACTORY!,
+        matchSettlement: process.env.EVM_MATCH_SETTLEMENT!,
+        stablecoin: process.env.EVM_STABLECOIN!,
+        feeCollector: process.env.EVM_FEE_COLLECTOR!,
       },
       market: {
         outcomesCount: parseInt(process.env.EVM_OUTCOMES_COUNT || '2', 10),

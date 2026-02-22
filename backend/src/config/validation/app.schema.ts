@@ -30,7 +30,9 @@ export const appEnvSchema = Joi.object({
     .valid('evm-local', 'arbitrum-mainnet', 'arbitrum-sepolia')
     .default('evm-local'),
   EVM_CHAIN_ID: Joi.number().integer().positive().default(1),
-  EVM_RPC_URL: Joi.string().uri().required(),
+  EVM_RPC_URL: Joi.string()
+    .uri()
+    .default('https://arbitrum-sepolia-testnet.api.pocket.network'),
   EVM_OPERATOR_KEY: Joi.string().required(),
   EVM_MARKET_FACTORY: Joi.string().required(),
   EVM_MATCH_SETTLEMENT: Joi.string().required(),
@@ -42,13 +44,6 @@ export const appEnvSchema = Joi.object({
 
   THROTTLE_TTL: Joi.number().integer().min(1).default(60),
   THROTTLE_LIMIT: Joi.number().integer().min(1).default(100),
-
-  MORALIS_API_KEY: Joi.string().required(),
-  MORALIS_STREAM_ID: Joi.string().required(),
-  MORALIS_WEBHOOK_SECRET: Joi.string().required(),
-  MORALIS_STREAMS_BASE_URL: Joi.string()
-    .uri()
-    .default('https://api.moralis.io'),
 
   TEST_EVM_PRIVATE_KEY: Joi.string().optional(),
   TEST_EVM_ADDRESS: Joi.string().optional(),

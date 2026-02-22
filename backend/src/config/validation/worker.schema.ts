@@ -18,7 +18,9 @@ export const workerEnvSchema = Joi.object({
     .valid('evm-local', 'arbitrum-mainnet', 'arbitrum-sepolia')
     .default('evm-local'),
   EVM_CHAIN_ID: Joi.number().integer().positive().default(1),
-  EVM_RPC_URL: Joi.string().uri().required(),
+  EVM_RPC_URL: Joi.string()
+    .uri()
+    .default('https://arbitrum-sepolia-testnet.api.pocket.network'),
   EVM_OPERATOR_KEY: Joi.string().required(),
   EVM_MARKET_FACTORY: Joi.string().required(),
   EVM_MATCH_SETTLEMENT: Joi.string().required(),
@@ -34,15 +36,16 @@ export const workerEnvSchema = Joi.object({
   REDIS_PASSWORD: Joi.string().allow('').optional(),
   REDIS_DB: Joi.number().integer().min(0).default(0),
 
-  MORALIS_API_KEY: Joi.string().optional(),
-  MORALIS_STREAM_ID: Joi.string().optional(),
-  MORALIS_WEBHOOK_SECRET: Joi.string().optional(),
-  MORALIS_STREAMS_BASE_URL: Joi.string().uri().optional(),
-
-  ENVIO_API_TOKEN: Joi.string().allow('').optional(),
-  INDEXER_HYPERSYNC_URL: Joi.string().uri().optional(),
-  INDEXER_HYPERRPC_URL: Joi.string().uri().optional(),
-  INDEXER_HYPERRPC_WSS_URL: Joi.string().optional(),
+  ENVIO_API_TOKEN: Joi.string().required(),
+  INDEXER_HYPERSYNC_URL: Joi.string()
+    .uri()
+    .default('https://arbitrum-sepolia.hypersync.xyz'),
+  INDEXER_HYPERRPC_URL: Joi.string()
+    .uri()
+    .default('https://api.zan.top/arb-sepolia'),
+  INDEXER_WSS_RPC_URL: Joi.string()
+    .uri()
+    .default('wss://arbitrum-sepolia-testnet.api.pocket.network'),
   INDEXER_FALLBACK_POLL_INTERVAL_MS: Joi.number()
     .integer()
     .min(5000)
