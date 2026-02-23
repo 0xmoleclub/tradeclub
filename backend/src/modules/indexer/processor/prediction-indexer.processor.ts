@@ -47,7 +47,12 @@ export class PredictionIndexerProcessor extends WorkerHost {
       return;
     }
 
-    await handler(job);
+    try {
+      await handler(job);
+    } catch (err) {
+      this.logger.error(`Error processing job ${job.name}: ${err}`);
+      throw err;
+    }
   }
 
   async handleTrade(job: Job<TradeJob>): Promise<void> {
@@ -81,8 +86,9 @@ export class PredictionIndexerProcessor extends WorkerHost {
     await this.prisma.$transaction(async (trx) => {
       // USD tokens has 6 decimals — convert raw cost to decimal USD
       const USD_DECIMALS = new Prisma.Decimal(1_000_000);
+      const WAD = new Prisma.Decimal(1e18);
       const costDecimal = new Prisma.Decimal(cost).div(USD_DECIMALS);
-      const sharesDecimal = new Prisma.Decimal(shares);
+      const sharesDecimal = new Prisma.Decimal(shares).div(WAD);
 
       // Fetch the latest LMSR outcome price from the contract
       const latestPriceDecimal = await this.contractService.getOutcomePrice(
@@ -167,6 +173,10 @@ export class PredictionIndexerProcessor extends WorkerHost {
       blockNumber,
     } = job.data;
 
+    // Normalize bytes16 hex → dashed UUID
+    matchId = this.bytes16ToUuid(matchId);
+    questionId = this.bytes16ToUuid(questionId);
+
     this.logger.log(
       `Processing MarketCreated: matchId=${matchId}, market=${market}, ` +
         `outcomesCount=${outcomesCount}, feeBps=${feeBps}, block=${blockNumber}`,
@@ -201,5 +211,53 @@ export class PredictionIndexerProcessor extends WorkerHost {
         marketAddress,
       },
     });
+  }
+
+  /**
+   * Converts a bytes16 value back to a standard dashed UUID.
+   *
+   * Handles three input formats:
+   *  1. Already a dashed UUID:  "3fe3df61-da6e-4585-b63b-f47867fab56e"
+   *  2. 0x-prefixed hex:        "0x3fe3df61da6e4585b63bf47867fab56e"
+   *  3. Decimal integer string: "16428771705006291268949899526278677566..."
+   */
+  private bytes16ToUuid(value: string): string {
+    // 1. Already a valid dashed UUID
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        value,
+      )
+    ) {
+      return value.toLowerCase();
+    }
+
+    let h: string;
+
+    // 2. Hex string (with or without 0x prefix)
+    if (/^(0x)?[0-9a-f]+$/i.test(value)) {
+      h = value.replace(/^0x/i, '').toLowerCase();
+    }
+    // 3. Decimal integer — bytes16 indexed topics arrive as uint256 decimal
+    else if (/^\d+$/.test(value)) {
+      h = BigInt(value).toString(16);
+    } else {
+      throw new Error(`bytes16ToUuid: unrecognised format "${value}"`);
+    }
+
+    // bytes16 is left-aligned in a 32-byte slot: UUID = first 32 hex chars.
+    // Pad short values (shouldn't happen) or truncate the right-side zeros.
+    if (h.length < 32) {
+      h = h.padStart(32, '0');
+    } else if (h.length > 32) {
+      h = h.slice(0, 32);
+    }
+
+    return [
+      h.slice(0, 8),
+      h.slice(8, 12),
+      h.slice(12, 16),
+      h.slice(16, 20),
+      h.slice(20, 32),
+    ].join('-');
   }
 }

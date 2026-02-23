@@ -1,5 +1,6 @@
 export interface CreateMarketParams {
   matchId: string;
+  questionId: string;
   outcomesCount?: number;
   bScore?: string;
   feeBps?: number;

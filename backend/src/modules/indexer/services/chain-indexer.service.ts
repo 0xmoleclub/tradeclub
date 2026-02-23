@@ -26,7 +26,7 @@ import { CacheService } from '@shared/cache/cache.service';
 
 // ── Event signatures & selectors ─────────────────────────────────────────────
 const MARKET_CREATED_SIG =
-  'MarketCreated(bytes32,address,uint8,uint256,uint16)';
+  'MarketCreated(bytes16,address,bytes16,uint8,uint256,uint16)';
 const MARKET_CREATED_TOPIC0 = keccak256(toBytes(MARKET_CREATED_SIG)) as string;
 
 const TRADE_SIG = 'Trade(address,uint8,uint256,uint256,uint256)';
@@ -198,7 +198,15 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
       });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.provider.websocket as any).addEventListener?.('close', () => {
+      const rawWs = this.provider.websocket as any;
+      // An unhandled 'error' event on a Node EventEmitter crashes the process.
+      // We absorb it here; the 'close' event that always follows will trigger reconnect.
+      rawWs.addEventListener?.('error', (evt: { message?: string }) => {
+        this.logger.warn(
+          `WSS RPC socket error: ${evt?.message ?? 'unknown'} — waiting for close to reconnect`,
+        );
+      });
+      rawWs.addEventListener?.('close', () => {
         this.logger.warn('WSS RPC connection closed — will reconnect…');
         void this.scheduleReconnect();
       });
@@ -237,14 +245,13 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
 
   private async poll(): Promise<void> {
     if (this.isRunning) {
-      this.logger.debug('Poll skipped — previous run still in progress');
       return;
     }
     this.isRunning = true;
     try {
       await this.runIndexCycle();
     } catch (err) {
-      this.logger.error('MarketCreated indexer poll error', err as Error);
+      this.logger.error(`Indexer error during running cycle: ${err}`);
     } finally {
       this.isRunning = false;
     }
@@ -261,14 +268,6 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
         contractAddresses: [h.contractAddress!],
         topic0: h.topic0,
       }));
-    this.logger.log(
-      'Static filters: ' +
-        staticFilters
-          .map((f) => {
-            return `topic0=${f.topic0}, contractAddresses=[${f.contractAddresses.join(', ')}]`;
-          })
-          .join(', '),
-    );
 
     // Dynamic Trade filters — one filter covering all known market addresses
     const marketAddresses = await this.cacheService.smembers(
@@ -288,13 +287,11 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
     const headBlock = chainHeight - cfg.confirmations;
 
     if (fromBlock > headBlock) {
-      this.logger.debug(
-        `Indexer up-to-date: fromBlock=${fromBlock}, headBlock=${headBlock}`,
-      );
+      // this.logger.debug(
+      //   `Indexer up-to-date: fromBlock=${fromBlock}, headBlock=${headBlock}`,
+      // );
       return;
     }
-
-    this.logger.debug(`Indexing events [${fromBlock}–${headBlock}]`);
 
     let current = fromBlock;
     while (current <= headBlock) {
@@ -324,7 +321,7 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
     log: HyperSyncRawLog,
   ): MarketCreatedJob | null {
     try {
-      // Indexed: topic1 = matchId (bytes32), topic2 = market (address)
+      // Indexed: topic1 = matchId (bytes16), topic2 = market (address)
       if (!log.topic1 || !log.topic2) {
         this.logger.warn(
           `MarketCreated log missing indexed topics at tx=${log.transactionHash}`,
@@ -332,16 +329,20 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
         return null;
       }
 
-      const matchId = BigInt(log.topic1).toString().replace(/^0x/, '');
+      // topic1 = bytes16 matchId, left-aligned in a 32-byte slot.
+      // e.g. "0x3fe3df61da6e4585b63bf47867fab56e00000000000000000000000000000000"
+      // Take the first 32 hex chars (= 16 bytes) after stripping 0x.
+      const matchId = log.topic1.replace(/^0x/i, '').slice(0, 32);
       const market = `0x${log.topic2.slice(-40)}`;
 
-      // Non-indexed: data = abi.encode(uint8 outcomesCount, uint256 b, uint16 feeBps)
+      // Non-indexed data: abi.encode(bytes16 questionId, uint8 outcomesCount, uint256 b, uint16 feeBps)
       const coder = AbiCoder.defaultAbiCoder();
-      let [questionId, outcomesCount, b, feeBps] = coder.decode(
-        ['bytes32', 'uint8', 'uint256', 'uint16'],
+      const [questionIdRaw, outcomesCount, b, feeBps] = coder.decode(
+        ['bytes16', 'uint8', 'uint256', 'uint16'],
         log.data,
       );
-      questionId = String(questionId).replace(/^0x/, '');
+      // ethers decodes bytes16 as a 0x-prefixed 32-char hex string
+      const questionId = String(questionIdRaw).replace(/^0x/i, '');
 
       return {
         matchId,

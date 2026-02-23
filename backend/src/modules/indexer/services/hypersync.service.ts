@@ -30,7 +30,7 @@ export class HypersyncService {
    * Fetches the current chain height from HyperSync.
    */
   async getChainHeight(): Promise<number> {
-    const resp = await fetch(`${this.baseUrl}/height`, {
+    const resp = await this.fetchWithRetry(`${this.baseUrl}/height`, {
       headers: this.headers,
     });
     if (!resp.ok) {
@@ -113,10 +113,10 @@ export class HypersyncService {
       timestamp: blockTimestamps.get(l.block_number) ?? 0,
     }));
 
-    this.logger.debug(
-      `HyperSync: [${fromBlock}-${toBlock}] → ${logs.length} logs, ` +
-        `nextBlock=${body.next_block}, archiveHeight=${body.archive_height ?? 'N/A'}`,
-    );
+    // this.logger.debug(
+    //   `HyperSync multilogs: [${fromBlock}-${toBlock}] → ${logs.length} logs, ` +
+    //     `nextBlock=${body.next_block}, archiveHeight=${body.archive_height ?? 'N/A'}`,
+    // );
 
     return logs;
   }
@@ -131,7 +131,17 @@ export class HypersyncService {
     fromBlock: number,
     toBlock: number,
   ): Promise<HyperSyncRawLog[]> {
-    if (filters.length === 0) return [];
+    if (filters.length === 0) {
+      this.logger.warn(
+        'getLogsMulti called with empty filters array; returning empty logs',
+      );
+      return [];
+    }
+
+    // this.logger.debug(
+    //   'getLogsMulti: ' +
+    //     JSON.stringify({ filters, fromBlock, toBlock }, null, 2),
+    // );
 
     const query = {
       from_block: fromBlock,
@@ -158,7 +168,7 @@ export class HypersyncService {
       },
     };
 
-    const resp = await fetch(`${this.baseUrl}/query`, {
+    const resp = await this.fetchWithRetry(`${this.baseUrl}/query`, {
       method: 'POST',
       headers: this.headers,
       body: JSON.stringify(query),
@@ -172,9 +182,6 @@ export class HypersyncService {
     }
 
     const body = (await resp.json()) as HyperSyncQueryResponse;
-    this.logger.verbose(
-      `HyperSync multi response:\n${JSON.stringify(body, null, 2)}`,
-    );
     const pages = body.data ?? [];
     const rawLogs = [];
     const rawBlocks = [];
@@ -207,16 +214,48 @@ export class HypersyncService {
       transactionInput: txInputs.get(l.transaction_hash.toLowerCase()),
     }));
 
-    this.logger.debug(
-      `HyperSync multi: [${fromBlock}-${toBlock}] ${filters.length} filter(s) → ${logs.length} logs`,
-    );
-
     if (logs.length > 0) {
-      this.logger.verbose(
-        'HOLY SHIT WE GOT LOGS:\n' + JSON.stringify(logs, null, 2),
-      );
+      this.logger.debug('HyperSync logs:\n' + JSON.stringify(logs, null, 2));
     }
 
     return logs;
+  }
+
+  /**
+   * fetch() wrapper with exponential-backoff retry for transient network failures.
+   * Retries on TypeError (fetch failed / connection reset) and 5xx responses.
+   */
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    maxAttempts = 4,
+    baseDelayMs = 500,
+  ): Promise<Response> {
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const resp = await fetch(url, init);
+        // Retry on server errors; surface client errors immediately
+        if (resp.status >= 500 && attempt < maxAttempts) {
+          this.logger.warn(
+            `HyperSync returned ${resp.status} (attempt ${attempt}/${maxAttempts}), retrying…`,
+          );
+          lastErr = new Error(`HTTP ${resp.status}`);
+        } else {
+          return resp;
+        }
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) {
+          this.logger.warn(
+            `HyperSync fetch error (attempt ${attempt}/${maxAttempts}): ${
+              (err as Error).message
+            } — retrying in ${baseDelayMs * attempt}ms`,
+          );
+        }
+      }
+      await new Promise((r) => setTimeout(r, baseDelayMs * attempt));
+    }
+    throw lastErr;
   }
 }

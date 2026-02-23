@@ -11,6 +11,7 @@ export const PREDICTION_MARKET_JOBS = {
  */
 export interface CreateMarketJob {
   battleId: string;
+  questionId: string;
   matchId: string;
 }
 
@@ -20,6 +21,7 @@ export interface CreateMarketJob {
 export interface ProposeOutcomeJob {
   battleId: string;
   matchId: string;
+  questionId: string;
   outcome: number;
   dataHash: string;
   codeCommitHash: string;

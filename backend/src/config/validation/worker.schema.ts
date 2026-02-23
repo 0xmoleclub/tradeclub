@@ -20,7 +20,7 @@ export const workerEnvSchema = Joi.object({
   EVM_CHAIN_ID: Joi.number().integer().positive().default(1),
   EVM_RPC_URL: Joi.string()
     .uri()
-    .default('https://arbitrum-sepolia-testnet.api.pocket.network'),
+    .default('https://sepolia-rollup.arbitrum.io/rpc'),
   EVM_OPERATOR_KEY: Joi.string().required(),
   EVM_MARKET_FACTORY: Joi.string().required(),
   EVM_MATCH_SETTLEMENT: Joi.string().required(),
@@ -45,7 +45,7 @@ export const workerEnvSchema = Joi.object({
     .default('https://api.zan.top/arb-sepolia'),
   INDEXER_WSS_RPC_URL: Joi.string()
     .uri()
-    .default('wss://arbitrum-sepolia-testnet.api.pocket.network'),
+    .default('wss://arbitrum-sepolia-rpc.publicnode.com'),
   INDEXER_FALLBACK_POLL_INTERVAL_MS: Joi.number()
     .integer()
     .min(5000)

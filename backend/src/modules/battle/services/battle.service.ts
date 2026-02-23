@@ -42,7 +42,7 @@ export class BattleService {
    * This is triggered when a match is found and a battle needs to be created.
    */
   async create(match: MatchGroup): Promise<Battle> {
-    const battle = await this.prisma.$transaction(async (tx) => {
+    const { battle, question } = await this.prisma.$transaction(async (tx) => {
       // ensure users still PENDING
       const updated = await tx.user.updateMany({
         where: {
@@ -71,8 +71,9 @@ export class BattleService {
         },
       });
 
-      // Every battle starts with a default prediction question "Who will win the battle?" and N outcomes (N = number of players) corresponding to "Player 1 wins", "Player 2 wins", etc.
-      const question = await tx.battlePredictionQuestion.create({
+      // Every battle starts with a default prediction question "Who will win the battle?"
+      // and N outcomes (N = number of players) corresponding to "Player 1 wins", "Player 2 wins", etc.
+      const q = await tx.battlePredictionQuestion.create({
         data: {
           battleId: b.id,
           questionText: 'Who will win the battle?',
@@ -85,7 +86,7 @@ export class BattleService {
         data: match.players.map((_, index) => {
           return {
             battleId: b.id,
-            battlePredictionQuestionId: question.id,
+            battlePredictionQuestionId: q.id,
             outcome: index,
           };
         }),
@@ -104,7 +105,7 @@ export class BattleService {
       });
 
       this.logger.log(`Created battle ${b.id} for match ${match.matchId}`);
-      return b;
+      return { battle: b, question: q };
     });
 
     if (!battle) {
@@ -112,15 +113,17 @@ export class BattleService {
       throw new Error(`Failed to create battle for match ${match.matchId}`);
     }
 
+    // Deploy onchain prediction market for battle (async op in message queue)
     try {
       await this.predictionMarketService.enqueueCreateMarket({
         battleId: battle.id,
         matchId: match.matchId,
+        questionId: question.id,
       });
     } catch (error) {
       this.logger.error(
         `Failed to enqueue market creation for match ${match.matchId}`,
-        error instanceof Error ? error.stack : String(error),
+        error,
       );
     }
 
@@ -356,6 +359,7 @@ export class BattleService {
       matchId,
       outcome,
       dataHash: dto.dataHash,
+      questionId: dto.questionId,
       codeCommitHash: dto.codeCommitHash,
     });
   }
