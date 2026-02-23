@@ -286,19 +286,19 @@ getEvent(key: 'OutcomeProposed'): TypedContractEvent<OutcomeProposedEvent.InputT
 
     filters: {
       
-      'DisputeCleared(bytes32)': TypedContractEvent<DisputeClearedEvent.InputTuple, DisputeClearedEvent.OutputTuple, DisputeClearedEvent.OutputObject>;
+      'DisputeCleared(bytes16)': TypedContractEvent<DisputeClearedEvent.InputTuple, DisputeClearedEvent.OutputTuple, DisputeClearedEvent.OutputObject>;
       DisputeCleared: TypedContractEvent<DisputeClearedEvent.InputTuple, DisputeClearedEvent.OutputTuple, DisputeClearedEvent.OutputObject>;
     
 
-      'OutcomeDisputed(bytes32,address)': TypedContractEvent<OutcomeDisputedEvent.InputTuple, OutcomeDisputedEvent.OutputTuple, OutcomeDisputedEvent.OutputObject>;
+      'OutcomeDisputed(bytes16,address)': TypedContractEvent<OutcomeDisputedEvent.InputTuple, OutcomeDisputedEvent.OutputTuple, OutcomeDisputedEvent.OutputObject>;
       OutcomeDisputed: TypedContractEvent<OutcomeDisputedEvent.InputTuple, OutcomeDisputedEvent.OutputTuple, OutcomeDisputedEvent.OutputObject>;
     
 
-      'OutcomeFinalized(bytes32,uint8)': TypedContractEvent<OutcomeFinalizedEvent.InputTuple, OutcomeFinalizedEvent.OutputTuple, OutcomeFinalizedEvent.OutputObject>;
+      'OutcomeFinalized(bytes16,uint8)': TypedContractEvent<OutcomeFinalizedEvent.InputTuple, OutcomeFinalizedEvent.OutputTuple, OutcomeFinalizedEvent.OutputObject>;
       OutcomeFinalized: TypedContractEvent<OutcomeFinalizedEvent.InputTuple, OutcomeFinalizedEvent.OutputTuple, OutcomeFinalizedEvent.OutputObject>;
     
 
-      'OutcomeProposed(bytes32,uint8,address,uint256,bytes32,bytes32)': TypedContractEvent<OutcomeProposedEvent.InputTuple, OutcomeProposedEvent.OutputTuple, OutcomeProposedEvent.OutputObject>;
+      'OutcomeProposed(bytes16,uint8,address,uint256,bytes16,bytes16)': TypedContractEvent<OutcomeProposedEvent.InputTuple, OutcomeProposedEvent.OutputTuple, OutcomeProposedEvent.OutputObject>;
       OutcomeProposed: TypedContractEvent<OutcomeProposedEvent.InputTuple, OutcomeProposedEvent.OutputTuple, OutcomeProposedEvent.OutputObject>;
     
     };

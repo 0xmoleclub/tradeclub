@@ -137,6 +137,10 @@ contract PredictionMarket is ReentrancyGuard {
         feeUsdc = (proceedsUsdc * feeBps) / 10_000;
     }
 
+    /// @notice Buy shares of an outcome.
+    /// @param outcome  The outcome index to buy.
+    /// @param amountShares Amount of shares in WAD (1e18 = 1 share, 1e17 = 0.1 shares).
+    /// @param maxCost  Maximum USDC (6-decimal) the caller is willing to spend (cost + fee).
     function buy(
         uint8 outcome,
         uint256 amountShares,
@@ -159,6 +163,10 @@ contract PredictionMarket is ReentrancyGuard {
         emit Trade(msg.sender, outcome, amountShares, costUsdc, feeUsdc);
     }
 
+    /// @notice Sell shares of an outcome.
+    /// @param outcome      The outcome index to sell.
+    /// @param amountShares Amount of shares in WAD (1e18 = 1 share, 1e17 = 0.1 shares).
+    /// @param minProceeds  Minimum net USDC (6-decimal) the caller expects to receive.
     function sell(
         uint8 outcome,
         uint256 amountShares,

@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/database/prisma.service';
-import { LoggerService } from '@shared/logger/logger.service';
+import { Logger } from '@nestjs/common';
 import { CONTRACT_CALL_QUEUE } from '../constants/queues.constants';
 import {
   CreateMarketJob,
@@ -13,9 +13,9 @@ import { PredictionContractService } from '../services/prediction-contract.servi
 
 @Processor(CONTRACT_CALL_QUEUE)
 export class PredictionContractProcessor extends WorkerHost {
+  private readonly logger = new Logger(PredictionContractProcessor.name);
   constructor(
     private readonly prisma: PrismaService,
-    private readonly logger: LoggerService,
     private readonly contractService: PredictionContractService,
   ) {
     super();
@@ -37,15 +37,26 @@ export class PredictionContractProcessor extends WorkerHost {
   }
 
   private async handleCreateMarket(job: Job<CreateMarketJob>) {
-    const { battleId } = job.data;
-    const result = await this.contractService.createMarket({ matchId: battleId }); // TODO: Using offchain battleId as onchain matchId for now, should refactor
-
-    await this.updateMetadata(battleId, {
-      onchain: {
-        marketAddress: result.marketAddress,
-        marketTxHash: result.txHash,
-      },
-    });
+    this.logger.verbose('calling handleCreateMarket');
+    const { battleId, questionId } = job.data;
+    try {
+      const result = await this.contractService.createMarket({
+        matchId: battleId,
+        questionId, // TODO: Using offchain battleId as onchain questionId for now, should refactor
+      });
+      this.logger.log(`CreateMarket result: ${JSON.stringify(result)}`);
+      await this.updateMetadata(battleId, questionId, {
+        onchain: {
+          marketAddress: result.marketAddress,
+          marketTxHash: result.txHash,
+        },
+      });
+    } catch (err) {
+      this.logger.error(
+        `Error in handleCreateMarket for battle ${battleId}: ${err}`,
+      );
+      throw err;
+    }
 
     this.logger.log(`Onchain market created for ${battleId} (job ${job.id})`);
   }
@@ -59,7 +70,7 @@ export class PredictionContractProcessor extends WorkerHost {
       codeCommitHash,
     });
 
-    await this.updateMetadata(battleId, {
+    await this.updateMetadata(battleId, job.data.questionId, {
       onchain: { outcomeTxHash: result.txHash },
     });
 
@@ -68,6 +79,7 @@ export class PredictionContractProcessor extends WorkerHost {
 
   private async updateMetadata(
     battleId: string,
+    questionId: string,
     patch: Prisma.InputJsonObject,
   ) {
     const current = await this.prisma.battle.findUnique({
@@ -91,9 +103,20 @@ export class PredictionContractProcessor extends WorkerHost {
       ...(mergedOnchain ? { onchain: mergedOnchain } : {}),
     };
 
-    await this.prisma.battle.update({
-      where: { id: battleId },
-      data: { metadata: next as Prisma.InputJsonValue },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.battle.update({
+        where: { id: battleId },
+        data: { metadata: next as Prisma.InputJsonValue },
+      });
+      const marketAddress = (patch.onchain as any)?.marketAddress;
+      if (marketAddress) {
+        await tx.battlePredictionQuestion.update({
+          where: { battleId, id: questionId },
+          data: {
+            marketAddress: (patch.onchain as any)?.marketAddress,
+          },
+        });
+      }
     });
   }
 }

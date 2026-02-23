@@ -1,143 +1,140 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import {SafeERC20} from '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
 contract MatchSettlement {
-    using SafeERC20 for IERC20;
+  using SafeERC20 for IERC20;
 
-    struct Proposal {
-        uint8 outcome;
-        address proposer;
-        address disputer;
-        uint256 proposedAt;
-        bool disputed;
-        bytes32 dataHash;
-        bytes32 codeCommitHash;
-    }
+  struct Proposal {
+    uint8 outcome;
+    address proposer;
+    address disputer;
+    uint256 proposedAt;
+    bool disputed;
+    bytes16 dataHash;
+    bytes16 codeCommitHash;
+  }
 
-    IERC20 public immutable bondToken;
-    uint256 public immutable disputeWindow;
-    uint256 public immutable bondAmount;
-    address public immutable proposerSigner;
+  IERC20 public immutable bondToken;
+  uint256 public immutable disputeWindow;
+  uint256 public immutable bondAmount;
+  address public immutable proposerSigner;
 
-    mapping(bytes32 => Proposal) public proposals;
-    mapping(bytes32 => bool) public finalized;
-    mapping(bytes32 => uint8) public finalOutcome;
+  mapping(bytes16 => Proposal) public proposals;
+  mapping(bytes16 => bool) public finalized;
+  mapping(bytes16 => uint8) public finalOutcome;
 
-    event OutcomeProposed(
-        bytes32 indexed matchId,
-        uint8 outcome,
-        address indexed proposer,
-        uint256 proposedAt,
-        bytes32 dataHash,
-        bytes32 codeCommitHash
+  event OutcomeProposed(
+    bytes16 indexed matchId,
+    uint8 outcome,
+    address indexed proposer,
+    uint256 proposedAt,
+    bytes16 dataHash,
+    bytes16 codeCommitHash
+  );
+  event OutcomeDisputed(bytes16 indexed matchId, address indexed disputer);
+  event OutcomeFinalized(bytes16 indexed matchId, uint8 outcome);
+  event DisputeCleared(bytes16 indexed matchId);
+
+  constructor(
+    address bondToken_,
+    uint256 disputeWindow_,
+    uint256 bondAmount_,
+    address proposerSigner_
+  ) {
+    bondToken = IERC20(bondToken_);
+    disputeWindow = disputeWindow_;
+    bondAmount = bondAmount_;
+    proposerSigner = proposerSigner_;
+  }
+
+  function proposeOutcome(
+    bytes16 matchId,
+    uint8 outcome,
+    bytes16 dataHash,
+    bytes16 codeCommitHash
+  ) external {
+    require(msg.sender == proposerSigner, 'not proposer');
+    Proposal storage existing = proposals[matchId];
+    require(existing.proposedAt == 0 || existing.disputed, 'active proposal');
+
+    bondToken.safeTransferFrom(msg.sender, address(this), bondAmount);
+    proposals[matchId] = Proposal({
+      outcome: outcome,
+      proposer: msg.sender,
+      disputer: address(0),
+      proposedAt: block.timestamp,
+      disputed: false,
+      dataHash: dataHash,
+      codeCommitHash: codeCommitHash
+    });
+
+    emit OutcomeProposed(
+      matchId,
+      outcome,
+      msg.sender,
+      block.timestamp,
+      dataHash,
+      codeCommitHash
     );
-    event OutcomeDisputed(bytes32 indexed matchId, address indexed disputer);
-    event OutcomeFinalized(bytes32 indexed matchId, uint8 outcome);
-    event DisputeCleared(bytes32 indexed matchId);
+  }
 
-    constructor(
-        address bondToken_,
-        uint256 disputeWindow_,
-        uint256 bondAmount_,
-        address proposerSigner_
-    ) {
-        bondToken = IERC20(bondToken_);
-        disputeWindow = disputeWindow_;
-        bondAmount = bondAmount_;
-        proposerSigner = proposerSigner_;
-    }
+  function disputeOutcome(bytes16 matchId) external {
+    Proposal storage proposal = proposals[matchId];
+    require(proposal.proposedAt != 0, 'no proposal');
+    require(!proposal.disputed, 'already disputed');
+    require(
+      block.timestamp <= proposal.proposedAt + disputeWindow,
+      'window passed'
+    );
 
-    function proposeOutcome(
-        bytes32 matchId,
-        uint8 outcome,
-        bytes32 dataHash,
-        bytes32 codeCommitHash
-    ) external {
-        require(msg.sender == proposerSigner, "not proposer");
-        Proposal storage existing = proposals[matchId];
-        require(
-            existing.proposedAt == 0 || existing.disputed,
-            "active proposal"
-        );
+    bondToken.safeTransferFrom(msg.sender, address(this), bondAmount);
+    proposal.disputed = true;
+    proposal.disputer = msg.sender;
 
-        bondToken.safeTransferFrom(msg.sender, address(this), bondAmount);
-        proposals[matchId] = Proposal({
-            outcome: outcome,
-            proposer: msg.sender,
-            disputer: address(0),
-            proposedAt: block.timestamp,
-            disputed: false,
-            dataHash: dataHash,
-            codeCommitHash: codeCommitHash
-        });
+    emit OutcomeDisputed(matchId, msg.sender);
+  }
 
-        emit OutcomeProposed(
-            matchId,
-            outcome,
-            msg.sender,
-            block.timestamp,
-            dataHash,
-            codeCommitHash
-        );
-    }
+  function finalizeOutcome(bytes16 matchId) external {
+    Proposal storage proposal = proposals[matchId];
+    require(proposal.proposedAt != 0, 'no proposal');
+    require(!proposal.disputed, 'disputed');
+    require(
+      block.timestamp > proposal.proposedAt + disputeWindow,
+      'window open'
+    );
+    require(!finalized[matchId], 'finalized');
 
-    function disputeOutcome(bytes32 matchId) external {
-        Proposal storage proposal = proposals[matchId];
-        require(proposal.proposedAt != 0, "no proposal");
-        require(!proposal.disputed, "already disputed");
-        require(
-            block.timestamp <= proposal.proposedAt + disputeWindow,
-            "window passed"
-        );
+    finalized[matchId] = true;
+    finalOutcome[matchId] = proposal.outcome;
 
-        bondToken.safeTransferFrom(msg.sender, address(this), bondAmount);
-        proposal.disputed = true;
-        proposal.disputer = msg.sender;
+    bondToken.safeTransfer(proposal.proposer, bondAmount);
 
-        emit OutcomeDisputed(matchId, msg.sender);
-    }
+    emit OutcomeFinalized(matchId, proposal.outcome);
+  }
 
-    function finalizeOutcome(bytes32 matchId) external {
-        Proposal storage proposal = proposals[matchId];
-        require(proposal.proposedAt != 0, "no proposal");
-        require(!proposal.disputed, "disputed");
-        require(
-            block.timestamp > proposal.proposedAt + disputeWindow,
-            "window open"
-        );
-        require(!finalized[matchId], "finalized");
+  function clearDispute(bytes16 matchId) external {
+    Proposal storage proposal = proposals[matchId];
+    require(proposal.disputed, 'not disputed');
+    require(
+      block.timestamp > proposal.proposedAt + disputeWindow,
+      'window open'
+    );
 
-        finalized[matchId] = true;
-        finalOutcome[matchId] = proposal.outcome;
+    // Refund both bonds (proposer + disputer). This resets the proposal state.
+    bondToken.safeTransfer(proposal.proposer, bondAmount);
+    bondToken.safeTransfer(proposal.disputer, bondAmount);
 
-        bondToken.safeTransfer(proposal.proposer, bondAmount);
+    delete proposals[matchId];
 
-        emit OutcomeFinalized(matchId, proposal.outcome);
-    }
+    emit DisputeCleared(matchId);
+  }
 
-    function clearDispute(bytes32 matchId) external {
-        Proposal storage proposal = proposals[matchId];
-        require(proposal.disputed, "not disputed");
-        require(
-            block.timestamp > proposal.proposedAt + disputeWindow,
-            "window open"
-        );
-
-        // Refund both bonds (proposer + disputer). This resets the proposal state.
-        bondToken.safeTransfer(proposal.proposer, bondAmount);
-        bondToken.safeTransfer(proposal.disputer, bondAmount);
-
-        delete proposals[matchId];
-
-        emit DisputeCleared(matchId);
-    }
-
-    function getOutcome(
-        bytes32 matchId
-    ) external view returns (bool isFinalized, uint8 outcome) {
-        return (finalized[matchId], finalOutcome[matchId]);
-    }
+  function getOutcome(
+    bytes16 matchId
+  ) external view returns (bool isFinalized, uint8 outcome) {
+    return (finalized[matchId], finalOutcome[matchId]);
+  }
 }

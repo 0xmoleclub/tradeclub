@@ -56,7 +56,7 @@ export class PredictionContractService {
     );
     const [costUsdc]: [bigint, bigint] = await contract.quoteBuy(
       outcome,
-      1n,
+      BigInt(1e18), // 1 share in WAD (1e18)
       blockNumber ? { blockTag: blockNumber } : {},
     );
     return new Prisma.Decimal(costUsdc.toString()).div(USDC_DECIMALS);
@@ -70,11 +70,13 @@ export class PredictionContractService {
       chain,
       params,
     );
-    const matchId = this.toMatchIdBytes32(params.matchId);
+    const matchId = this.uuidToBytes16(params.matchId);
+    const questionId = this.uuidToBytes16(params.questionId);
     const contract = await this.getMarketFactoryContract(chain);
 
     const tx = await contract.createMarket(
       matchId,
+      questionId,
       outcomesCount,
       bScore,
       feeBps,
@@ -91,7 +93,7 @@ export class PredictionContractService {
     params: ProposeOutcomeParams,
   ): Promise<ProposeOutcomeResult> {
     const chain = this.chainConfig;
-    const matchId = this.toMatchIdBytes32(params.matchId);
+    const matchId = this.uuidToBytes16(params.matchId);
     const contract = await this.getMatchSettlementContract(chain);
 
     const tx = await contract.proposeOutcome(
@@ -127,10 +129,14 @@ export class PredictionContractService {
   }
 
   private async getOperatorWallet(provider?: Provider): Promise<Wallet> {
-    const operatorKey = await this.evmCryptoService.decryptPrivateKey(
-      this.configService.getOrThrow<string>('EVM_OPERATOR_KEY'),
-    );
-    return new Wallet(operatorKey, provider ?? this.provider);
+    const raw = this.configService.getOrThrow<string>('EVM_OPERATOR_KEY');
+    // A raw private key is 0x-prefixed 64-char hex; the encrypted format is
+    // "ivBase64:authTagBase64:ciphertextBase64" (contains colons, no 0x).
+    const isRawKey = /^0x[0-9a-fA-F]{64}$/.test(raw);
+    const privateKey = isRawKey
+      ? (raw as `0x${string}`)
+      : await this.evmCryptoService.decryptPrivateKey(raw);
+    return new Wallet(privateKey, provider ?? this.provider);
   }
 
   private extractMarketAddress(
@@ -150,14 +156,20 @@ export class PredictionContractService {
     return undefined;
   }
 
-  toMatchIdBytes32(matchId: string): string {
-    const hex = matchId.replace(/-/g, '');
+  uuidToBytes16(matchId: string): string {
+    // Accept UUIDs with or without dashes and optional 0x prefix.
+    let hex = matchId;
+    if (hex.startsWith('0x') || hex.startsWith('0X')) {
+      hex = hex.slice(2);
+    }
+    // Remove any dashes that may be present in Prisma UUIDs.
+    hex = hex.replace(/-/g, '');
     if (!/^[0-9a-fA-F]{32}$/.test(hex)) {
       throw new Error(
-        `Invalid matchId format: expected UUID-like 32-character hex string, got: ${matchId}`,
+        `Invalid matchId format: expected UUID-like 32-character hex string (with optional dashes or 0x prefix), got: ${matchId}`,
       );
     }
-    return `0x${hex.padStart(64, '0')}`;
+    return `0x${hex}`;
   }
 
   private resolveMarketParams(chain: ChainConfig, params: CreateMarketParams) {
