@@ -19,10 +19,25 @@ export class BattleEvents {
     try {
       const battle = await this.battle.create(event.match);
 
+      // add user to battle room on server-side
+      const playerIds = event.match.players.map((p) => p.userId);
+      await this.gateway.addUsersToBattleRoom(battle.id, playerIds);
+
+      // broadcast battle created event to all players in the battle room
       this.gateway.broadcastToBattle(battle.id, EVENTS.BATTLE_CREATED, {
         battleId: battle.id,
         players: event.match.players,
       });
+
+      // send notify to user's personal room on server-side to trigger client to join battle room
+      for (const userId of playerIds) {
+        this.gateway.server
+          .to(this.gateway.getUserRoom(userId))
+          .emit(EVENTS.BATTLE_CREATED, {
+            battleId: battle.id,
+            players: event.match.players,
+          });
+      }
 
       this.logger.log(
         `Battle created for match ${event.match.matchId} with battle ID ${battle.id}`,
