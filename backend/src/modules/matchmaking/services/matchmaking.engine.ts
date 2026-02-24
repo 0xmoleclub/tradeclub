@@ -86,8 +86,7 @@ export class MatchmakingEngine {
 
       // force match if wait time exceeds threshold
       const forced =
-        group.length >= 2 && // at least 2 players to form a match
-        group.length < this.config.minGroupSize &&
+        group.length >= this.config.minGroupSize &&
         waitTimeSec >= this.config.forceMatchAfterSec;
 
       if (group.length >= this.config.minGroupSize || forced) {
