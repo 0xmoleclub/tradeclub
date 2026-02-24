@@ -106,12 +106,14 @@ export class BattlePlayerService {
    * This is used when a player loses connection during the battle.
    */
   async markDisconnected(battleId: string, userId: string) {
-    await this.prisma.battlePlayer.updateMany({
+    const result = await this.prisma.battlePlayer.updateMany({
       where: { battleId, userId },
       data: { status: BattlePlayerStatus.DISCONNECTED },
     });
 
     this.logger.log(`Player ${userId} disconnected from battle ${battleId}`);
+
+    return result.count > 0;
   }
 
   /**
@@ -119,11 +121,13 @@ export class BattlePlayerService {
    * This is used when a player leaves before the battle starts or after it ends.
    */
   async leaveBattle(battleId: string, userId: string) {
-    await this.prisma.battlePlayer.updateMany({
+    const result = await this.prisma.battlePlayer.updateMany({
       where: { battleId, userId },
       data: { status: BattlePlayerStatus.LEFT },
     });
 
     this.logger.log(`Player ${userId} left battle ${battleId}`);
+
+    return result.count > 0;
   }
 }

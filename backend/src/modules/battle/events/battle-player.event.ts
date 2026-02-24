@@ -54,14 +54,30 @@ export class BattlePlayerEvents {
 
   @OnEvent(EVENTS.PLAYER_LEFT)
   async handleLeft(event: BattlePlayerEvent) {
-    await this.player.leaveBattle(event.battleId, event.userId);
+    const { battleId, userId } = event;
 
+    // mark player left in database
+    const left = await this.player.leaveBattle(battleId, userId);
+    if (!left) return;
+
+    // broadcast player left status to battle room
+    this.gateway.broadcastToBattle(battleId, EVENTS.PLAYER_LEFT, {
+      battleId,
+      userId,
+    });
+
+    // remove user socket from battle room
+    await this.gateway.removeUserFromBattleRoom(battleId, userId);
+
+    // evaluate battle lifecycle to check if battle should be cancelled (e.g. if all players left)
     const result = await this.lifecycle.evaluate(event.battleId);
 
     if (result && result.type === 'cancelled') {
       this.gateway.broadcastToBattle(event.battleId, EVENTS.BATTLE_CANCELLED, {
         battleId: event.battleId,
       });
+
+      await this.gateway.cleanupBattleRoom(event.battleId);
     }
   }
 }

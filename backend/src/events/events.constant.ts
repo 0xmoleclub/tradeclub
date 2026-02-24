@@ -3,6 +3,9 @@ export const EVENTS = {
   MATCH_FOUND: 'match.found',
 
   // Battle lifecycle events
+  BATTLE_QUEUE: 'battle.queue',
+  BATTLE_JOIN: 'battle.join',
+  BATTLE_READY: 'battle.ready',
   BATTLE_CREATED: 'battle.created',
   BATTLE_STARTED: 'battle.started',
   BATTLE_CANCELLED: 'battle.cancelled',
@@ -10,7 +13,6 @@ export const EVENTS = {
 
   // Player events
   PLAYER_READY: 'battle.player.ready',
-  PLAYER_DISCONNECTED: 'battle.player.disconnected',
   PLAYER_LEFT: 'battle.player.left',
   PLAYER_FINISHED: 'battle.player.finished',
 };

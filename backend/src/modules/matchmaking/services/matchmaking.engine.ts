@@ -20,6 +20,8 @@ export class MatchmakingEngine {
    * @param candidate - The player to add to the queue
    */
   addPlayer(candidate: MatchCandidate): void {
+    // ensure joinedAt is set for sorting and wait time calculations
+    if (!candidate.joinedAt) candidate.joinedAt = Date.now();
     this.queue.push(candidate);
     this.logger.debug(`Player ${candidate.userId} added to matchmaking queue.`);
   }
@@ -85,12 +87,10 @@ export class MatchmakingEngine {
       }
 
       // force match if wait time exceeds threshold
-      const forced =
-        group.length >= 2 && // at least 2 players to form a match
-        group.length < this.config.minGroupSize &&
-        waitTimeSec >= this.config.forceMatchAfterSec;
+      const forceBecauseWait = waitTimeSec >= this.config.forceMatchAfterSec;
+      const meetsMin = group.length >= this.config.minGroupSize;
 
-      if (group.length >= this.config.minGroupSize || forced) {
+      if (meetsMin || forceBecauseWait) {
         group.forEach((p) => used.add(p.userId)); // add matched players into a 'room'
 
         const avgElo = group.reduce((sum, p) => sum + p.elo, 0) / group.length;
@@ -100,12 +100,12 @@ export class MatchmakingEngine {
           players: group,
           avgElo,
           createdAt: now,
-          forced,
+          forced: forceBecauseWait && !meetsMin,
         });
         this.logger.debug(
           `Match created ${group.map((p) => p.userId).join(', ')} | avgElo=${avgElo.toFixed(
             1,
-          )} | forced=${forced}`,
+          )} | forced=${forceBecauseWait && !meetsMin}`,
         );
       }
     }
