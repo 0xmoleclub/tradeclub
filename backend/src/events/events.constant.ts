@@ -5,6 +5,7 @@ export const EVENTS = {
   // Battle lifecycle events
   BATTLE_QUEUE: 'battle.queue',
   BATTLE_JOIN: 'battle.join',
+  BATTLE_READY: 'battle.ready',
   BATTLE_CREATED: 'battle.created',
   BATTLE_STARTED: 'battle.started',
   BATTLE_CANCELLED: 'battle.cancelled',

@@ -40,6 +40,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (userId && battleId) {
       this.eventEmitter.emit(EVENTS.PLAYER_DISCONNECTED, { battleId, userId });
     }
+
+    // leave user room automatically by socket.io, no need to manually remove from rooms
   }
 
   // ============= HELPER METHODS ==============
@@ -114,6 +116,19 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(
       `Client ${client.id} joined battle room ${room} (userId: ${payload.userId})`,
     );
+  }
+
+  // player indicates ready
+  @SubscribeMessage(EVENTS.BATTLE_READY)
+  async onPlayerReady(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { battleId: string; userId: string },
+  ) {
+    // emit event into EventEmitter to be handled by BattlePlayerEvents
+    this.eventEmitter.emit(EVENTS.PLAYER_READY, {
+      battleId: payload.battleId,
+      userId: payload.userId,
+    });
   }
 
   // ============== BROADCAST METHODS ==============
