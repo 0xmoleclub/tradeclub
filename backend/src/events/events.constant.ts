@@ -13,7 +13,6 @@ export const EVENTS = {
 
   // Player events
   PLAYER_READY: 'battle.player.ready',
-  PLAYER_DISCONNECTED: 'battle.player.disconnected',
   PLAYER_LEFT: 'battle.player.left',
   PLAYER_FINISHED: 'battle.player.finished',
 };

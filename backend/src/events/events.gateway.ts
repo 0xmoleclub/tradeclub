@@ -28,6 +28,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly matchmaking: MatchmakingService,
   ) {}
 
+  // ============= CORE GATEWAY METHODS ==============
+
   handleConnection(client: Socket) {
     this.logger.log(`Client connected: ${client.id}`);
   }
@@ -37,8 +39,14 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     this.logger.log(`Client disconnected: ${client.id}`);
 
-    if (userId && battleId) {
-      this.eventEmitter.emit(EVENTS.PLAYER_DISCONNECTED, { battleId, userId });
+    if (!userId) return;
+
+    // remove from matchmaking queue if in queue
+    this.matchmaking.removeFromQueue(userId);
+
+    // if in battle room, emit player left
+    if (battleId) {
+      this.eventEmitter.emit(EVENTS.PLAYER_LEFT, { battleId, userId });
     }
 
     // leave user room automatically by socket.io, no need to manually remove from rooms
@@ -79,6 +87,34 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`Added users ${userIds.join(', ')} to battle room ${room}`);
   }
 
+  // server helper to remove all sockets of a list of users from battle room
+  async removeUserFromBattleRoom(battleId: string, userId: string) {
+    const room = this.getBattleRoom(battleId);
+    // use server.in(userRoom).socketsLeave(room) if supported
+    try {
+      this.server.in(this.getUserRoom(userId)).socketsLeave(room);
+    } catch {
+      // fallback: iterate sockets and leave manually
+      const sockets = Array.from(this.server.sockets.sockets.values());
+      for (const s of sockets) {
+        if (s.data?.userId === userId) {
+          s.leave(room);
+        }
+      }
+    }
+    this.logger.log(`Removed user ${userId} from battle room ${room}`);
+  }
+
+  async cleanupBattleRoom(battleId: string) {
+    const room = this.getBattleRoom(battleId);
+    const sockets = await this.server.in(room).fetchSockets();
+
+    for (const socket of sockets) {
+      socket.leave(room);
+      socket.data.battleId = undefined;
+    }
+  }
+
   // ============= SUBSCRIBE METHODS ==============
 
   // client sends auth message after connecting to associate socket with userId
@@ -96,9 +132,9 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage(EVENTS.BATTLE_QUEUE)
   async joinQueue(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { userId: string; elo: number; joinedAt: number },
+    @MessageBody() payload: { userId: string; elo: number },
   ) {
-    this.matchmaking.addToQueue(payload);
+    this.matchmaking.addToQueue({ ...payload, joinedAt: Date.now() });
     this.logger.log(`User ${payload.userId} joined matchmaking queue.`);
   }
 
