@@ -79,6 +79,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
    * Wrapper function to call
    */
   addToQueue(candidate: MatchCandidate) {
+    if (!candidate.joinedAt) candidate.joinedAt = Date.now();
     this.engine.addPlayer(candidate);
   }
 
