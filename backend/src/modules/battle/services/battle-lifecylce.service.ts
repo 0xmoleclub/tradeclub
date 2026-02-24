@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { BattlePlayerService } from './battle-player.service';
 import { BattleService } from './battle.service';
 import { BattlePlayerStatus, BattleStatus } from '@prisma/client';
+import { CreateBattleResultDto } from '../dto';
 
 @Injectable()
 export class BattleLifecycleService {
@@ -17,6 +18,9 @@ export class BattleLifecycleService {
       isCorrect: true,
       codeCommitHash: 'system',
       metrics: [],
+      description: 'Auto-generated result',
+      outcome: 1,
+      questionId: '',
     };
   }
 
@@ -55,7 +59,7 @@ export class BattleLifecycleService {
       );
 
       if (allFinished) {
-        const dto = this.buildAutoResult(battleId);
+        const dto: CreateBattleResultDto = this.buildAutoResult(battleId);
         const result = await this.battle.battleFinish(battleId, dto);
         return { type: 'finished', payload: result };
       }
