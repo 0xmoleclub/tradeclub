@@ -3,6 +3,8 @@ export const EVENTS = {
   MATCH_FOUND: 'match.found',
 
   // Battle lifecycle events
+  BATTLE_QUEUE: 'battle.queue',
+  BATTLE_JOIN: 'battle.join',
   BATTLE_CREATED: 'battle.created',
   BATTLE_STARTED: 'battle.started',
   BATTLE_CANCELLED: 'battle.cancelled',
