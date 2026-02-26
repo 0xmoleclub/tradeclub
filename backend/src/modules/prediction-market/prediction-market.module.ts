@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { EvmCryptoService } from '@/modules/hypercore-wallets/services';
 import { PredictionMarketService } from './services/prediction-market.service';
 import { PredictionContractService } from './services/prediction-contract.service';
+import { PredictionMarketController } from './prediction-market.controller';
 import { BullModule } from '@nestjs/bullmq';
 import { CONTRACT_CALL_QUEUE } from './constants/queues.constants';
 import { PredictionContractProcessor } from './processors/prediction-contract.processor';
@@ -36,6 +37,7 @@ import { INDEXER_QUEUE_PREDICTION_MARKET } from '@modules/indexer/constants/inde
     PredictionContractProcessor,
     PredictionContractService,
   ],
+  controllers: [PredictionMarketController],
   exports: [PredictionMarketService, PredictionContractService],
 })
 export class PredictionMarketModule {}
