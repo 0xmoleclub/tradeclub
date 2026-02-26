@@ -2,7 +2,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Search } from "lucide-react";
 import { useState } from "react";
 import { TokenCard } from "./TokenCard";
-import { Player } from "@/hooks/useMatching";
+import { useBattle } from "@/hooks/useBattle";
 
 const availableTokens = [
     { symbol: "ETH", name: "Ethereum", rate: "+12.5%", MC: "1.2B" },
@@ -26,22 +26,19 @@ const formatStake = (value: number) => {
     })}`;
 };
 
-interface CreateMatchProps {
-    matching: boolean;
-    addPlayer: (player: Player) => void;
-    removePlayer: (username: string) => void;
-}
-
-export const CreateMatch = ({
-    matching,
-    addPlayer,
-    removePlayer,
-}: CreateMatchProps) => {
+export const CreateMatch = () => {
     const [current, setCurrent] = useState<number>(1);
     const [duration, setDuration] = useState("15");
 
     const [tokenSearch, setTokenSearch] = useState("");
     const [selectedTokens, setSelectedTokens] = useState<string[]>([]);
+
+    // use Battle hook for matchmaking logic
+    const { joinQueue, leaveQueue, status } = useBattle(
+        "user-id-placeholder",
+        current,
+    ); // Replace with actual user ID from authentication
+    const matching = status === "matching";
 
     const filteredTokens = availableTokens.filter(
         (token) =>
@@ -74,15 +71,8 @@ export const CreateMatch = ({
     };
 
     const handleMatching = () => {
-        if (matching) removePlayer("You");
-        else
-            addPlayer({
-                id: "you",
-                isYou: true,
-                username: "You",
-                rank: 1,
-                stake: formatStake(current),
-            });
+        if (status === "matching") leaveQueue();
+        else joinQueue();
     };
 
     return (

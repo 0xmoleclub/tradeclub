@@ -2,15 +2,13 @@ import { GlassPanel } from "../ui/GlassPanel";
 import { useCountdown } from "../../hooks/useCountDown";
 import { useEffect } from "react";
 import { PlayerCard } from "./PlayerCard";
-import { Player } from "@/hooks/useMatching";
+import { useBattle } from "@/hooks/useBattle";
 
-interface MatchingProps {
-    matching: boolean;
-    players: Player[];
-    setMatching: (matching: boolean) => void;
-}
+export const Matching = () => {
+    const { status, players } = useBattle("user-id-placeholder"); // Replace with actual user ID from authentication
 
-export const Matching = ({ matching, players, setMatching }: MatchingProps) => {
+    const matching = status === "matching" || status === "matched";
+
     const { seconds, start, reset } = useCountdown(30);
 
     useEffect(() => {
@@ -32,7 +30,7 @@ export const Matching = ({ matching, players, setMatching }: MatchingProps) => {
                 {/* OPPONENTS FOUND */}
                 <div className="grid grid-cols-4 gap-4 ease-in-out transition-all duration-500">
                     {players.map((player) => (
-                        <PlayerCard key={player.id} player={player} />
+                        <PlayerCard key={player.userId} player={player} />
                     ))}
                 </div>
             </div>

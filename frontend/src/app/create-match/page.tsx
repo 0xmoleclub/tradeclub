@@ -5,14 +5,10 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { CreateMatch } from "@/components/create-match/CreateMatch";
 import { LaserBackground } from "@/components/ui/effects/LaserBackground";
 import { Matching } from "@/components/create-match/Matching";
-import { useMatching } from "@/hooks/useMatching";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 import { SocketProvider } from "@/components/socket/SocketProvider";
 
 export default function CreateMatchPage() {
-    const { matching, setMatching, players, addPlayer, removePlayer } =
-        useMatching();
-
     const userId = "user-id-placeholder"; // Replace with actual user ID from authentication
 
     // socket connect from create to end (matching -> match found -> match start -> match end)
@@ -33,17 +29,9 @@ export default function CreateMatchPage() {
 
                 {/* MAIN CONTENT */}
                 <div className="flex flex-col max-w-[900px] mx-auto gap-6 p-6">
-                    <CreateMatch
-                        matching={matching}
-                        addPlayer={addPlayer}
-                        removePlayer={removePlayer}
-                    />
+                    <CreateMatch />
 
-                    <Matching
-                        matching={matching}
-                        players={players}
-                        setMatching={setMatching}
-                    />
+                    <Matching />
                 </div>
             </div>
         </SocketProvider>

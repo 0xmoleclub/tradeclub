@@ -1,94 +1,124 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getSocket } from "@/lib/socket";
+import { EVENTS } from "@/types/events.constants";
 
-export function useBattle(userId: string) {
-    const socket = getSocket();
+export interface BattlePlayer {
+    userId: string;
+    name: string;
+    stake: number;
+}
+
+export interface BattleRoom {
+    battleId: string;
+    players: BattlePlayer[];
+}
+
+export type BattleStatus =
+    | "idle"
+    | "matching"
+    | "matched"
+    | "running"
+    | "finished"
+    | "cancelled";
+
+export function useBattle(userId: string, stake?: number) {
+    const socket = getSocket(userId);
+
+    useEffect(() => {
+        socket.connect();
+    }, [socket]);
 
     const [battleId, setBattleId] = useState<string | null>(null);
-    const [players, setPlayers] = useState<any[]>([]);
-    const [status, setStatus] = useState("idle");
+    const [players, setPlayers] = useState<BattlePlayer[]>([]);
+    const [status, setStatus] = useState<BattleStatus>("idle");
 
-    // =========================
-    // JOIN MATCHMAKING
-    // =========================
-    const joinQueue = (elo: number) => {
+    // ========================
+    // ACTIONS
+    // ========================
+
+    const joinQueue = useCallback(() => {
+        console.log("Joining queue with stake:", stake);
         setStatus("matching");
+        socket.emit(EVENTS.BATTLE_QUEUE, { userId, stake });
+    }, [socket, stake, userId]);
 
-        socket.emit("battle.queue", {
-            userId,
-            elo,
-        });
-    };
+    const leaveQueue = useCallback(() => {
+        setStatus("idle");
+        socket.emit(EVENTS.BATTLE_DEQUEUE, { userId });
+    }, [socket, userId]);
 
-    const leaveBattle = () => {
+    const ready = useCallback(() => {
         if (!battleId) return;
+        socket.emit(EVENTS.BATTLE_READY, { battleId });
+    }, [socket, battleId]);
 
-        socket.emit("battle.leave", {
-            battleId,
-            userId,
-        });
-    };
-
-    const ready = () => {
+    const finish = useCallback(() => {
         if (!battleId) return;
+        socket.emit(EVENTS.BATTLE_FINISHED, { battleId });
+    }, [socket, battleId]);
 
-        socket.emit("battle.ready", {
-            battleId,
-            userId,
-        });
-    };
+    const disconnect = useCallback(() => {
+        socket.disconnect();
+        setStatus("idle");
+        setBattleId(null);
+        setPlayers([]);
+    }, [socket]);
 
-    // =========================
-    // LISTEN SERVER EVENTS
-    // =========================
+    // ========================
+    // SERVER EVENTS
+    // ========================
+
     useEffect(() => {
-        // match found
-        socket.on("battle.created", (data) => {
+        if (!socket) return;
+
+        const handleCreated = (data: BattleRoom) => {
             setBattleId(data.battleId);
             setPlayers(data.players);
             setStatus("matched");
+        };
 
-            // join battle room explicitly (optional)
-            socket.emit("battle.join", {
-                battleId: data.battleId,
-                userId,
-            });
-        });
+        const handleStarted = () => setStatus("running");
 
-        socket.on("battle.started", () => {
-            setStatus("running");
-        });
-
-        socket.on("battle.finished", (result) => {
+        const handleFinished = ({ battleId }: { battleId: string }) => {
             setStatus("finished");
-            console.log("Battle result:", result);
-        });
+            console.log("Finished battle:", battleId);
+        };
 
-        socket.on("battle.cancelled", () => {
+        const handleCancelled = () => {
             setStatus("cancelled");
-        });
+            setBattleId(null);
+            setPlayers([]);
+        };
 
-        socket.on("battle.player.left", (data) => {
-            console.log("Player left:", data);
-        });
+        const handlePlayerLeft = (userId: string) => {
+            setPlayers((prev) => prev.filter((p) => p.userId !== userId));
+        };
+
+        socket.on(EVENTS.BATTLE_CREATED, handleCreated);
+        socket.on(EVENTS.BATTLE_STARTED, handleStarted);
+        socket.on(EVENTS.BATTLE_FINISHED, handleFinished);
+        socket.on(EVENTS.BATTLE_CANCELLED, handleCancelled);
+        socket.on(EVENTS.PLAYER_LEFT, handlePlayerLeft);
 
         return () => {
-            socket.off("battle.created");
-            socket.off("battle.started");
-            socket.off("battle.finished");
-            socket.off("battle.cancelled");
-            socket.off("battle.player.left");
+            socket.off(EVENTS.BATTLE_CREATED, handleCreated);
+            socket.off(EVENTS.BATTLE_STARTED, handleStarted);
+            socket.off(EVENTS.BATTLE_FINISHED, handleFinished);
+            socket.off(EVENTS.BATTLE_CANCELLED, handleCancelled);
+            socket.off(EVENTS.PLAYER_LEFT, handlePlayerLeft);
         };
-    }, [socket, userId]);
+    }, [socket]);
 
     return {
         battleId,
         players,
         status,
         joinQueue,
+        leaveQueue,
         ready,
-        leaveBattle,
+        finish,
+        disconnect,
     };
 }
