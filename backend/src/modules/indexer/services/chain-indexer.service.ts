@@ -349,7 +349,7 @@ export class ChainIndexerService implements OnModuleInit, OnModuleDestroy {
         questionId,
         market,
         outcomesCount: Number(outcomesCount),
-        b: Number(b),
+        b: b.toString(),
         feeBps: Number(feeBps),
         timestamp: log.timestamp,
         txHash: log.transactionHash,

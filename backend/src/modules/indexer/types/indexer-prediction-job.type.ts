@@ -27,7 +27,7 @@ export interface MarketCreatedJob {
   questionId: string; // bytes16 questionId, sent as contract call param and emitted back in event to help with indexing
   market: string; // contract address
   outcomesCount: number;
-  b: number; // b score parameter for LMSR
+  b: string; // b score parameter for LMSR (WAD uint256 as decimal string)
   feeBps: number; // fee in basis points
   timestamp: number;
 }

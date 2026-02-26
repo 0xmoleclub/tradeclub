@@ -206,9 +206,11 @@ export class PredictionIndexerProcessor extends WorkerHost {
         questionText: 'Who will win the battle?',
         description:
           'Predict which player will win the battle based on who has the highest PnL at the end.',
+        bScore: new Prisma.Decimal(job.data.b.toString()),
       },
       update: {
         marketAddress,
+        bScore: new Prisma.Decimal(job.data.b.toString()),
       },
     });
   }
