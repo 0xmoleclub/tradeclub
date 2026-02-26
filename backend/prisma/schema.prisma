@@ -202,6 +202,7 @@ model BattlePredictionQuestion {
   shares       Decimal @default(0) @db.Decimal(38, 18) // total shares traded for this question (sum of all choices)
   volume       Decimal @default(0) @db.Decimal(38, 18) // total volume traded for this question (sum of all choices)
   size         Decimal @default(0) @db.Decimal(38, 18) // total size traded for this question (sum of all choices)
+  bScore       Decimal @default("1000000000000000000") @db.Decimal(38, 18) // LMSR b parameter in WAD (1e18)
 
   battleId      String
   marketAddress String? // address of the on-chain prediction market contract for this question
