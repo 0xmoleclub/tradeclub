@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EVENTS } from '../gateway/events.constant';
 import { MatchmakingService } from '../matchmaking/matchmaking.service';

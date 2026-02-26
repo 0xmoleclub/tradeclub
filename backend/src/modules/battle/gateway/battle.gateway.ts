@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ConnectedSocket,
@@ -11,6 +11,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { EVENTS } from './events.constant';
+import { LoggerService } from '@/shared/logger/logger.service';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -21,7 +22,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
-  constructor(private readonly eventEmitter: EventEmitter2) {}
+  constructor(
+    private readonly eventEmitter: EventEmitter2,
+    private readonly logger: LoggerService,
+  ) {}
 
   async handleConnection(client: Socket) {
     const { userId } = client.handshake.auth;
@@ -29,6 +33,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     client.data.userId = userId;
     client.join(this.getUserRoom(userId));
+
+    this.logger.log(`Client connected: ${userId} (socket id: ${client.id})`);
   }
 
   async handleDisconnect(client: Socket) {
@@ -38,6 +44,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!userId || !battleId) return;
 
     this.eventEmitter.emit(EVENTS.PLAYER_LEFT, { userId, battleId });
+    this.logger.log(`Client disconnected: ${userId} (socket id: ${client.id})`);
   }
 
   @SubscribeMessage(EVENTS.BATTLE_QUEUE)
