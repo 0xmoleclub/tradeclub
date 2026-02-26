@@ -1,4 +1,4 @@
-import { MatchmakingConfig } from '@/modules/battle/matchmaking/matchmaking.types';
+import { MatchmakingConfig } from '@/modules/battle/types/matchmaking.types';
 
 export const matchmakingConfig: MatchmakingConfig = {
   minGroupSize: 2,

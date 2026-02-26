@@ -34,7 +34,8 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleDisconnect(client: Socket) {
     const userId = client.data.userId;
     const battleId = client.data.battleId;
-    if (!userId) return;
+
+    if (!userId || !battleId) return;
 
     this.eventEmitter.emit(EVENTS.PLAYER_LEFT, { userId, battleId });
   }
@@ -42,6 +43,13 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage(EVENTS.BATTLE_QUEUE)
   async joinQueue(@ConnectedSocket() client: Socket) {
     this.eventEmitter.emit(EVENTS.PLAYER_QUEUE, {
+      userId: client.data.userId,
+    });
+  }
+
+  @SubscribeMessage(EVENTS.BATTLE_DEQUEUE)
+  async leaveQueue(@ConnectedSocket() client: Socket) {
+    this.eventEmitter.emit(EVENTS.PLAYER_DEQUEUE, {
       userId: client.data.userId,
     });
   }

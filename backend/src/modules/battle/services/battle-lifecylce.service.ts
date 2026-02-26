@@ -3,11 +3,12 @@ import { BattlePlayerService } from './battle-player.service';
 import { BattleService } from './battle.service';
 import { BattleStatus } from '@prisma/client';
 import { BattleRealtimeService } from '@/modules/battle/services/battle-realtime.service';
-import { MatchGroup } from '@/modules/battle/matchmaking/matchmaking.types';
+import { MatchGroup } from '@/modules/battle/types/matchmaking.types';
 import { PrismaService } from '@/database/prisma.service';
 import { CreateBattleResultDto } from '../dto/battle-result.dto';
 import { buildBattleResult } from '../utils/build-battle-result';
 import { EVENTS } from '../gateway/events.constant';
+import { BattlePlayerShorted } from '../types/battle-player.types';
 
 @Injectable()
 export class BattleLifecycleService {
@@ -23,10 +24,21 @@ export class BattleLifecycleService {
   async handleMatch(match: MatchGroup) {
     const battle = await this.battle.create(match);
 
+    // get and map players for frontend (could optimize by returning players directly from battle creation instead of querying again)
+    const players = (await this.player.getPlayers(battle.id)).map((p) => {
+      return {
+        userId: p.userId,
+        name: p.user.name,
+        stake: p.stake.toNumber(), // convert Decimal to number for easier handling on frontend
+      } as BattlePlayerShorted;
+    });
+
     for (const p of match.players) {
+      await this.realtime.addUserToBattle(battle.id, p.userId);
+
       this.realtime.emitToUser(p.userId, EVENTS.BATTLE_CREATED, {
         battleId: battle.id,
-        players: match.players,
+        players: players,
       });
     }
   }
@@ -83,17 +95,23 @@ export class BattleLifecycleService {
 
       if (!allFinished) return;
 
-      dto = buildBattleResult() as CreateBattleResultDto; // TODO: build real result based on player performance and metrics
+      dto = buildBattleResult(); // TODO: build real result based on player performance and metrics
 
       // transition STARTED → FINISHED
       result = await this.battle.battleFinish(battleId, dto, tx);
     });
 
     if (result) {
+      const players = await this.player.getPlayers(battleId);
+
       this.realtime.emitToBattle(battleId, EVENTS.BATTLE_FINISHED, {
         battleId,
-        result,
       });
+
+      // clear battle room on finish to prevent stale rooms and free up resources
+      for (const p of players) {
+        await this.realtime.removeUserFromBattle(battleId, p.userId);
+      }
     }
   }
 
@@ -119,9 +137,15 @@ export class BattleLifecycleService {
     });
 
     if (cancelled) {
+      const players = await this.player.getPlayers(battleId);
+
       this.realtime.emitToBattle(battleId, EVENTS.BATTLE_CANCELLED, {
         battleId,
       });
+
+      for (const p of players) {
+        await this.realtime.removeUserFromBattle(battleId, p.userId);
+      }
     }
   }
 }

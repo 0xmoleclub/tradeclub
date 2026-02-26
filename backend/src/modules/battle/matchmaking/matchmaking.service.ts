@@ -7,9 +7,8 @@ import {
 } from '@nestjs/common';
 import { MatchmakingEngine } from './matchmaking.engine';
 import { LoggerService } from '@/shared/logger/logger.service';
-import { MatchmakingConfig } from './matchmaking.types';
+import { MatchmakingConfig } from '../types/matchmaking.types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { MatchFoundEvent } from '../events/match-found.event';
 import { UserStatus } from '@prisma/client';
 import { PrismaService } from '@/database/prisma.service';
 import { EVENTS } from '../gateway/events.constant';
@@ -68,10 +67,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
       const matches = this.engine.match();
 
       for (const match of matches) {
-        this.eventEmitter.emitAsync(
-          EVENTS.MATCH_FOUND,
-          new MatchFoundEvent(match),
-        );
+        this.eventEmitter.emitAsync(EVENTS.MATCH_FOUND, { match });
       }
     } finally {
       this.running = false;
@@ -81,7 +77,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
   /**
    * Wrapper function to call
    */
-  async addToQueue(userId: string) {
+  async addToQueue(userId: string, stake: number) {
     // check user status
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -102,6 +98,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
       userId,
       elo: user.elo,
       joinedAt: Date.now(),
+      stake,
     });
     await this.tick(); // trigger immediate matchmaking attempt
 
@@ -112,6 +109,7 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
     // remove from matching queue
     this.engine.removePlayer(userId);
 
+    // unlock user status
     await this.prisma.user.update({
       where: { id: userId },
       data: { status: UserStatus.ACTIVE },

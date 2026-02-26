@@ -1,5 +1,5 @@
 import { PrismaService } from '@/database/prisma.service';
-import { MatchGroup } from '../matchmaking/matchmaking.types';
+import { MatchGroup } from '../types/matchmaking.types';
 import {
   BattleStatus,
   BattlePlayerStatus,
@@ -98,6 +98,7 @@ export class BattleService {
           userId: p.userId,
           status: BattlePlayerStatus.JOINED,
           slot: index + 1,
+          stake: p.stake,
           eloSnapshot: p.elo,
         })),
       });

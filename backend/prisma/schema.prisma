@@ -129,6 +129,7 @@ model BattlePlayer {
 
   status     BattlePlayerStatus @default(JOINED)
   slot       Int // 1 -> 4 Player position
+  stake      Decimal @db.Decimal(20, 6) // USD snapshot 
   joinedAt   DateTime           @default(now())
   finishedAt DateTime?
 

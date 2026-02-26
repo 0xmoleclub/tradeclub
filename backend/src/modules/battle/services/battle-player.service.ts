@@ -19,6 +19,7 @@ export class BattlePlayerService {
   ) {
     return tx.battlePlayer.findMany({
       where: { battleId },
+      include: { user: true },
       orderBy: { slot: 'asc' },
     });
   }

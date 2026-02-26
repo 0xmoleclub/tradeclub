@@ -4,7 +4,7 @@ import {
   MatchCandidate,
   MatchGroup,
   MatchmakingConfig,
-} from './matchmaking.types';
+} from '../types/matchmaking.types';
 
 export class MatchmakingEngine {
   // using queue data structure to hold players waiting for a match

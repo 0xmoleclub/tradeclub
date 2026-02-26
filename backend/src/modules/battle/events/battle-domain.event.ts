@@ -1,9 +1,9 @@
-import { MatchFoundEvent } from '@/modules/battle/events/match-found.event';
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { BattleLifecycleService } from '../services/battle-lifecylce.service';
-import { BattlePlayerEvent } from '../types/battle-player.events.types';
+import { BattlePlayerEvent } from '../types/battle-player.types';
 import { EVENTS } from '../gateway/events.constant';
+import { MatchFoundEvent } from '../types/match-types';
 
 @Injectable()
 export class BattleDomainEvents {
