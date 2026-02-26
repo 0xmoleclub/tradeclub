@@ -1,4 +1,4 @@
-import { MatchGroup } from './types/matchmaking.types';
+import { MatchGroup } from '../matchmaking/matchmaking.types';
 
 export class MatchFoundEvent {
   constructor(public readonly match: MatchGroup) {}

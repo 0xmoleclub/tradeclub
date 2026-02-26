@@ -4,15 +4,15 @@ export const EVENTS = {
 
   // Battle lifecycle events
   BATTLE_QUEUE: 'battle.queue',
-  BATTLE_JOIN: 'battle.join',
-  BATTLE_READY: 'battle.ready',
   BATTLE_CREATED: 'battle.created',
+  BATTLE_READY: 'battle.ready',
   BATTLE_STARTED: 'battle.started',
-  BATTLE_CANCELLED: 'battle.cancelled',
   BATTLE_FINISHED: 'battle.finished',
+  BATTLE_CANCELLED: 'battle.cancelled',
 
   // Player events
-  PLAYER_READY: 'battle.player.ready',
-  PLAYER_LEFT: 'battle.player.left',
-  PLAYER_FINISHED: 'battle.player.finished',
+  PLAYER_QUEUE: 'player.queue',
+  PLAYER_READY: 'player.ready',
+  PLAYER_LEFT: 'player.left',
+  PLAYER_FINISHED: 'player.finished',
 };

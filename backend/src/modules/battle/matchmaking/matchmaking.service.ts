@@ -7,10 +7,12 @@ import {
 } from '@nestjs/common';
 import { MatchmakingEngine } from './matchmaking.engine';
 import { LoggerService } from '@/shared/logger/logger.service';
-import { MatchCandidate, MatchmakingConfig } from '../types/matchmaking.types';
+import { MatchmakingConfig } from './matchmaking.types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { EVENTS } from '@/events/events.constant';
-import { MatchFoundEvent } from '../match-found.event';
+import { MatchFoundEvent } from '../events/match-found.event';
+import { UserStatus } from '@prisma/client';
+import { PrismaService } from '@/database/prisma.service';
+import { EVENTS } from '../gateway/events.constant';
 
 @Injectable()
 export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
@@ -20,13 +22,14 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
   private intervalMs = 500; // run matchmaking every 500ms
 
   constructor(
+    private readonly prisma: PrismaService,
     private readonly logger: LoggerService,
     private readonly eventEmitter: EventEmitter2,
     @Inject('MATCHMAKING_CONFIG')
     private readonly config: MatchmakingConfig,
   ) {
     // init engine from config
-    this.engine = new MatchmakingEngine(this.config, this.logger);
+    this.engine = new MatchmakingEngine(this.config);
   }
 
   onModuleInit() {
@@ -57,18 +60,18 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
   }
 
   // prevent overlapping ticks
-  private async tick() {
+  async tick() {
     if (this.running) return;
     this.running = true;
 
     try {
-      // start matchmaking engine tick
       const matches = this.engine.match();
 
-      // match found, emit event for battle creation
       for (const match of matches) {
-        this.eventEmitter.emit(EVENTS.MATCH_FOUND, new MatchFoundEvent(match));
-        this.logger.log(`Match event emitted: ${match.matchId} `);
+        this.eventEmitter.emitAsync(
+          EVENTS.MATCH_FOUND,
+          new MatchFoundEvent(match),
+        );
       }
     } finally {
       this.running = false;
@@ -78,13 +81,41 @@ export class MatchmakingService implements OnModuleInit, OnModuleDestroy {
   /**
    * Wrapper function to call
    */
-  addToQueue(candidate: MatchCandidate) {
-    if (!candidate.joinedAt) candidate.joinedAt = Date.now();
-    this.engine.addPlayer(candidate);
+  async addToQueue(userId: string) {
+    // check user status
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      return;
+    }
+
+    // lock user as QUEUING (recommend add enum)
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { status: UserStatus.PENDING },
+    });
+
+    // add to matching queue
+    this.engine.addPlayer({
+      userId,
+      elo: user.elo,
+      joinedAt: Date.now(),
+    });
+    await this.tick(); // trigger immediate matchmaking attempt
+
+    this.logger.log(`User ${userId} queued`);
   }
 
-  removeFromQueue(userId: string) {
+  async removeFromQueue(userId: string) {
+    // remove from matching queue
     this.engine.removePlayer(userId);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { status: UserStatus.ACTIVE },
+    });
   }
 
   getQueue() {

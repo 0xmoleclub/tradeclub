@@ -1,5 +1,5 @@
 import { PrismaService } from '@/database/prisma.service';
-import { MatchGroup } from '../../matchmaking/types/matchmaking.types';
+import { MatchGroup } from '../matchmaking/matchmaking.types';
 import {
   BattleStatus,
   BattlePlayerStatus,
@@ -9,11 +9,11 @@ import {
 } from '@prisma/client';
 import { LoggerService } from '@/shared/logger/logger.service';
 import { Injectable } from '@nestjs/common';
-import { CreateBattleResultDto } from '../dto';
 import { BattlePlayerService } from './battle-player.service';
 import { buildRanking } from '../utils/ranking.util';
 import { computeEloDelta } from '../utils/elo.util';
 import { PredictionMarketService } from '@modules/prediction-market/services/prediction-market.service';
+import { CreateBattleResultDto } from '../dto/battle-result.dto';
 
 // ORCHESTRATOR SERVICE FOR BATTLE LIFECYCLE
 
@@ -43,9 +43,24 @@ export class BattleService {
    */
   async create(match: MatchGroup): Promise<Battle> {
     const battle = await this.prisma.$transaction(async (tx) => {
+      // ensure users still PENDING
+      const updated = await tx.user.updateMany({
+        where: {
+          id: { in: match.players.map((p) => p.userId) },
+          status: UserStatus.PENDING,
+        },
+        data: { status: UserStatus.IN_BATTLE },
+      });
+
+      if (updated.count !== match.players.length) {
+        throw new Error(
+          `Some users are not in PENDING state for match ${match.matchId}`,
+        );
+      }
+
       const b = await tx.battle.create({
         data: {
-          status: BattleStatus.MATCHING, // initial status
+          status: BattleStatus.WAITING, // initial status
           maxPlayers: match.players.length,
           metadata: {
             matchId: match.matchId,
@@ -76,6 +91,7 @@ export class BattleService {
         }),
       });
 
+      // create battle players
       await tx.battlePlayer.createMany({
         data: match.players.map((p, index) => ({
           battleId: b.id,
@@ -112,37 +128,38 @@ export class BattleService {
 
   /**
    * Starts the battle if all players are ready.
-   * It updates the battle status to RUNNING and marks players as PLAYING.
+   * It updates the battle status to STARTED and marks players as PLAYING.
    * Lock users to prevent them from joining other battles while this battle is active.
    */
-  async battleStart(battleId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const battle = await tx.battle.findUnique({
-        where: { id: battleId },
-      });
-
-      // check if battle exists and is in correct status
-      if (!battle || battle.status !== BattleStatus.MATCHING) {
-        return null;
-      }
-
-      // update battle status to RUNNING
-      const updated = await tx.battle.update({
-        where: { id: battleId },
-        data: {
-          status: BattleStatus.RUNNING,
-          startedAt: new Date(),
-        },
-      });
-
-      // mark players as playing
-      await this.player.markPlaying(battleId, tx);
-
-      // lock users in battle -> set IN_BATTLE status
-      await this.toggleLockUser(battleId, UserStatus.IN_BATTLE, tx);
-
-      return updated;
+  async battleStart(
+    battleId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const battle = await tx.battle.findUnique({
+      where: { id: battleId },
     });
+
+    // check if battle exists and is in correct status
+    if (!battle || battle.status !== BattleStatus.WAITING) {
+      return null;
+    }
+
+    // update battle status to STARTED
+    await tx.battle.update({
+      where: { id: battleId },
+      data: {
+        status: BattleStatus.STARTED,
+        startedAt: new Date(),
+      },
+    });
+
+    // mark players as playing
+    await this.player.markPlaying(battleId, tx);
+
+    // lock users in battle -> set IN_BATTLE status
+    await this.toggleLockUser(battleId, UserStatus.IN_BATTLE, tx);
+
+    return true;
   }
 
   /**
@@ -150,38 +167,38 @@ export class BattleService {
    * It updates the battle status to FINISHED, calculates results, updates player stats, and unlocks users.
    * This is triggered when the battle is evaluated and determined to be finished.
    */
-  async battleFinish(battleId: string, dto: CreateBattleResultDto) {
-    const result = await this.prisma.$transaction(async (tx) => {
-      const battle = await tx.battle.findUnique({
-        where: { id: battleId },
-        include: { players: true },
-      });
-
-      // check if battle exists and is in correct status
-      if (!battle || battle.status !== BattleStatus.RUNNING) {
-        return null;
-      }
-
-      // mark all playing players as finished
-      await tx.battle.update({
-        where: { id: battleId },
-        data: {
-          status: BattleStatus.FINISHED,
-          endedAt: new Date(),
-        },
-      });
-
-      // update players elo and rank points based on battle result
-      await this.updateEloAndRankPoints(battleId, dto, tx);
-
-      // unlock users in battle -> set ACTIVE status
-      await this.toggleLockUser(battleId, UserStatus.ACTIVE, tx);
-
-      // create battle result
-      const result = await this.createBattleResult(battleId, dto, tx);
-
-      return result;
+  async battleFinish(
+    battleId: string,
+    dto: CreateBattleResultDto,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const battle = await tx.battle.findUnique({
+      where: { id: battleId },
+      include: { players: true },
     });
+
+    // check if battle exists and is in correct status
+    if (!battle || battle.status !== BattleStatus.STARTED) {
+      return null;
+    }
+
+    // mark all playing players as finished
+    await tx.battle.update({
+      where: { id: battleId },
+      data: {
+        status: BattleStatus.FINISHED,
+        endedAt: new Date(),
+      },
+    });
+
+    // update players elo and rank points based on battle result
+    await this.updateEloAndRankPoints(battleId, dto, tx);
+
+    // unlock users in battle -> set ACTIVE status
+    await this.toggleLockUser(battleId, UserStatus.ACTIVE, tx);
+
+    // create battle result
+    const result = await this.createBattleResult(battleId, dto, tx);
 
     if (result) {
       void this.proposeOutcomeAsync(battleId, dto).catch((error) => {
@@ -196,33 +213,34 @@ export class BattleService {
   }
 
   /**
-   * Cancels the battle if it is still in MATCHING status.
+   * Cancels the battle if it is still in WAITING status.
    * It updates the battle status to CANCELLED and unlocks users if necessary.
    * This is triggered when the battle is evaluated and determined to be cancelled (e.g., a player left).
    */
-  async battleCancel(battleId: string) {
-    return this.prisma.$transaction(async (tx) => {
-      const battle = await tx.battle.findUnique({
-        where: { id: battleId },
-        include: { players: true },
-      });
-
-      if (!battle || battle.status !== BattleStatus.MATCHING) {
-        return null;
-      }
-
-      const cancelled = await tx.battle.update({
-        where: { id: battleId },
-        data: { status: BattleStatus.CANCELLED },
-      });
-
-      await tx.user.updateMany({
-        where: { id: { in: battle.players.map((p) => p.userId) } },
-        data: { status: UserStatus.ACTIVE },
-      });
-
-      return cancelled;
+  async battleCancel(
+    battleId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const battle = await tx.battle.findUnique({
+      where: { id: battleId },
+      include: { players: true },
     });
+
+    if (!battle || battle.status !== BattleStatus.WAITING) {
+      return null;
+    }
+
+    const cancelled = await tx.battle.update({
+      where: { id: battleId },
+      data: { status: BattleStatus.CANCELLED },
+    });
+
+    await tx.user.updateMany({
+      where: { id: { in: battle.players.map((p) => p.userId) } },
+      data: { status: UserStatus.ACTIVE },
+    });
+
+    return cancelled;
   }
 
   // ==================== UTILS ====================

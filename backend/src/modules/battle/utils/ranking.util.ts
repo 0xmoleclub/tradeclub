@@ -1,4 +1,4 @@
-import { BattleMetricDto } from '../dto';
+import { BattleMetricDto } from '../dto/battle-result.dto';
 
 export function buildRanking(metrics: BattleMetricDto[]) {
   const roi = metrics.filter((m) => m.metric === 'ROI');

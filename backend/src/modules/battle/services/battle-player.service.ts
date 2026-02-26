@@ -24,16 +24,28 @@ export class BattlePlayerService {
   }
 
   /**
-   * Checks if all players in the battle are ready or playing.
+   * Checks if all players in the battle are ready
    * This is used to determine if the battle can start.
    */
-  async allPlayersReady(battleId: string) {
-    const players = await this.getPlayers(battleId);
+  async allPlayersReady(
+    battleId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const players = await this.getPlayers(battleId, tx);
 
-    return players.every(
-      (p) =>
-        p.status === BattlePlayerStatus.READY ||
-        p.status === BattlePlayerStatus.PLAYING,
+    return players.every((p) => p.status === BattlePlayerStatus.READY);
+  }
+
+  /**
+   * Checks if all players in the battle are finished
+   * This is used to determine if the battle can be marked as finished.
+   */
+  async areAllFinished(battleId: string, tx: Prisma.TransactionClient) {
+    const players = await this.getPlayers(battleId, tx);
+
+    return (
+      players.length > 0 &&
+      players.every((p) => p.status === BattlePlayerStatus.FINISHED)
     );
   }
 
@@ -41,8 +53,12 @@ export class BattlePlayerService {
    * Marks a player as ready in the battle
    * This is used when a player indicates they are ready to start the battle.
    */
-  async markReady(battleId: string, userId: string) {
-    const result = await this.prisma.battlePlayer.updateMany({
+  async markReady(
+    battleId: string,
+    userId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const result = await tx.battlePlayer.updateMany({
       where: {
         battleId,
         userId,
@@ -50,10 +66,7 @@ export class BattlePlayerService {
       },
       data: { status: BattlePlayerStatus.READY },
     });
-
-    if (result.count === 0) return false;
-
-    return true;
+    return result.count > 0;
   }
 
   /**
@@ -64,19 +77,10 @@ export class BattlePlayerService {
     battleId: string,
     tx: Prisma.TransactionClient = this.prisma,
   ) {
-    const player = await tx.battlePlayer.updateMany({
+    await tx.battlePlayer.updateMany({
       where: { battleId, status: BattlePlayerStatus.READY },
       data: { status: BattlePlayerStatus.PLAYING },
     });
-
-    if (player.count === 0) {
-      throw new Error(
-        `Players in battle ${battleId} cannot be marked as playing. No players ready.`,
-      );
-    }
-
-    this.logger.log(`All players in battle ${battleId} are now playing`);
-    return this.getPlayers(battleId, tx);
   }
 
   /**
@@ -84,29 +88,27 @@ export class BattlePlayerService {
    */
   async markFinished(
     battleId: string,
+    userId: string,
     tx: Prisma.TransactionClient = this.prisma,
   ) {
-    const player = await tx.battlePlayer.updateMany({
-      where: { battleId, status: BattlePlayerStatus.PLAYING },
+    const result = await tx.battlePlayer.updateMany({
+      where: { battleId, userId, status: BattlePlayerStatus.PLAYING },
       data: { status: BattlePlayerStatus.FINISHED, finishedAt: new Date() },
     });
 
-    if (player.count === 0) {
-      throw new Error(
-        `Players in battle ${battleId} cannot be marked as finished. No players playing.`,
-      );
-    }
-
-    this.logger.log(`All players in battle ${battleId} are now finished`);
-    return this.getPlayers(battleId, tx);
+    return result.count > 0;
   }
 
   /**
    * Marks a player as disconnected in the battle
    * This is used when a player loses connection during the battle.
    */
-  async markDisconnected(battleId: string, userId: string) {
-    const result = await this.prisma.battlePlayer.updateMany({
+  async markDisconnected(
+    battleId: string,
+    userId: string,
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
+    const result = await tx.battlePlayer.updateMany({
       where: { battleId, userId },
       data: { status: BattlePlayerStatus.DISCONNECTED },
     });
@@ -120,8 +122,12 @@ export class BattlePlayerService {
    * Removes a player from the battle
    * This is used when a player leaves before the battle starts or after it ends.
    */
-  async leaveBattle(battleId: string, userId: string) {
-    const result = await this.prisma.battlePlayer.updateMany({
+  async leaveBattle(
+    battleId: string,
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const result = await tx.battlePlayer.updateMany({
       where: { battleId, userId },
       data: { status: BattlePlayerStatus.LEFT },
     });
