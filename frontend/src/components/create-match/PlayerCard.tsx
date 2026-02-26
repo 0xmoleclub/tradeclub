@@ -1,8 +1,10 @@
-import { Player } from "@/hooks/useMatching";
+import { BattlePlayer } from "@/hooks/useBattle";
 import Image from "next/image";
 
-export const PlayerCard = ({ player }: { player: Player }) => {
-    const { isYou, username, rank, stake } = player;
+export const PlayerCard = ({ player }: { player: BattlePlayer }) => {
+    const { userId, name, stake } = player;
+
+    const isYou = userId === "user-id-placeholder"; // Replace with actual user ID from authentication
 
     return (
         <div
@@ -30,12 +32,10 @@ export const PlayerCard = ({ player }: { player: Player }) => {
 
             <h3
                 className="text-center font-bold truncate max-w-[120px]"
-                title={username}
+                title={name}
             >
-                {username}
+                {name}
             </h3>
-
-            <p className="text-xs text-center text-solar font-mono">Rank {rank}</p>
 
             <p className="text-xs text-center text-acid/80 font-mono">
                 Stake ${stake}

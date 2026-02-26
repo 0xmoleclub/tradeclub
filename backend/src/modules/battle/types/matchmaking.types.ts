@@ -4,6 +4,7 @@
 export interface MatchCandidate {
   userId: string;
   elo: number;
+  stake: number;
   joinedAt: number; // timestamp (ms)
 }
 

@@ -31,8 +31,9 @@ enum BattlePlayerStatus {
 }
 
 enum BattleStatus {
-  MATCHING
-  RUNNING
+  WAITING
+  READY
+  STARTED
   FINISHED
   CANCELLED
 }
@@ -97,7 +98,7 @@ model Battle {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  status     BattleStatus @default(MATCHING)
+  status     BattleStatus @default(WAITING)
   maxPlayers Int          @default(4)
 
   startedAt DateTime?
@@ -105,7 +106,7 @@ model Battle {
 
   metadata Json?
 
-  intendedDurationMs Int  @default(3600000) // Duration of the battle in miliseconds 
+  intendedDurationMs Int  @default(3600000) // Duration of the battle in miliseconds
   actualDurationMs   Int? // Actual duration of the battle in miliseconds (written when battle finishes)
 
   // Relations
@@ -128,6 +129,7 @@ model BattlePlayer {
 
   status     BattlePlayerStatus @default(JOINED)
   slot       Int // 1 -> 4 Player position
+  stake      Decimal @db.Decimal(20, 6) // USD snapshot 
   joinedAt   DateTime           @default(now())
   finishedAt DateTime?
 

@@ -24,10 +24,8 @@ import { HypercoreModule } from './modules/hypercore/hypercore.module';
 
 // Event Emitter
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { EventsModule } from './events/events.module';
 
 // Engines modules
-import { MatchmakingModule } from './modules/matchmaking/matchmaking.module';
 import { BattleModule } from './modules/battle/battle.module';
 import { getRedisConnection } from './shared/utils/redis';
 
@@ -40,13 +38,7 @@ import { getRedisConnection } from './shared/utils/redis';
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [
-        appConfig,
-        chainConfig,
-        databaseConfig,
-        jwtConfig,
-        throttleConfig,
-      ],
+      load: [appConfig, chainConfig, databaseConfig, jwtConfig, throttleConfig],
       envFilePath: ['.env', '.env.local'],
       validationSchema: appEnvSchema,
     }),
@@ -78,12 +70,8 @@ import { getRedisConnection } from './shared/utils/redis';
     DatabaseModule,
     SharedModule,
 
-    // Websocket Events module
-    EventsModule,
-
     // Engines modules
     // Battle / Match modules
-    MatchmakingModule,
     BattleModule,
 
     // Feature modules
