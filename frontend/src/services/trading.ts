@@ -247,6 +247,14 @@ export const tradingApi = {
     });
   },
 
+  // Close all positions
+  closeAllPositions: async (closeType: 'marketClose' | 'limitCloseAtMidPrice' = 'marketClose'): Promise<OrderResponse> => {
+    return fetchWithAuth('/hypercore/positions/close-all', {
+      method: 'POST',
+      body: JSON.stringify({ closeType }),
+    });
+  },
+
   // Leverage
   updateLeverage: async (coin: string, leverage: number): Promise<OrderResponse> => {
     return fetchWithAuth('/hypercore/leverage', {

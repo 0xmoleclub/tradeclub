@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { 
   Loader2, 
   Wallet, 
@@ -185,7 +186,7 @@ const ClosePositionModal = ({ position, isOpen, onClose, onSuccess }: ClosePosit
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-white/10">
@@ -276,7 +277,186 @@ const ClosePositionModal = ({ position, isOpen, onClose, onSuccess }: ClosePosit
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
+  );
+};
+
+// ==================== CLOSE ALL POSITIONS MODAL ====================
+interface CloseAllPositionsModalProps {
+  positions: Position[];
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const CloseAllPositionsModal = ({ positions, isOpen, onClose, onSuccess }: CloseAllPositionsModalProps) => {
+  const { signIn, canTrade } = useAuth();
+  const [closeType, setCloseType] = useState<"market" | "limit">("market");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<{type: "loading" | "success" | "error", message: string} | null>(null);
+  
+  const totalPositions = positions.length;
+  const totalValue = positions.reduce((sum, pos) => sum + Math.abs(parseFloat(pos.positionValue)), 0);
+  const totalPnL = positions.reduce((sum, pos) => sum + parseFloat(pos.unrealizedPnl), 0);
+
+  const handleCloseAll = async () => {
+    if (!canTrade) {
+      setStatus({ type: "loading", message: "Authenticating..." });
+      try {
+        await signIn();
+      } catch (err: any) {
+        setStatus({ type: "error", message: err.message || "Authentication failed" });
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    setStatus({ type: "loading", message: "Closing all positions..." });
+
+    try {
+      const response = await tradingApi.closeAllPositions(
+        closeType === "market" ? "marketClose" : "limitCloseAtMidPrice"
+      );
+
+      if (response?.success) {
+        setStatus({ type: "success", message: "All positions closed!" });
+        setTimeout(() => {
+          onSuccess();
+          onClose();
+        }, 1500);
+      }
+    } catch (err: any) {
+      setStatus({ type: "error", message: err.message || "Close all failed" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-white/10">
+          <h3 className="text-sm font-bold text-white">Close All Positions</h3>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {/* Warning */}
+          <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-orange-400 mt-0.5" />
+              <div className="text-xs text-orange-400">
+                You are about to close all {totalPositions} open position{totalPositions !== 1 ? 's' : ''}.
+                This action cannot be undone.
+              </div>
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="p-3 bg-white/5 rounded-lg border border-white/10 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Positions</span>
+              <span className="font-mono text-white">{totalPositions}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total Value</span>
+              <span className="font-mono text-white">{formatValue(totalValue)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Total PnL</span>
+              <span className={`font-mono font-bold ${
+                totalPnL >= 0 ? "text-green-400" : "text-red-400"
+              }`}>
+                {totalPnL >= 0 ? "+" : ""}{formatValue(totalPnL)}
+              </span>
+            </div>
+          </div>
+
+          {/* Positions List */}
+          <div className="max-h-40 overflow-auto space-y-1">
+            {positions.map((pos) => {
+              const size = parseFloat(pos.szi);
+              const isLong = size > 0;
+              return (
+                <div key={pos.coin} className="flex items-center justify-between p-2 bg-white/5 rounded text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-white">{pos.coin}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      isLong ? "bg-cyan-500/20 text-cyan-400" : "bg-magenta-500/20 text-magenta-400"
+                    }`}>
+                      {isLong ? "LONG" : "SHORT"}
+                    </span>
+                  </div>
+                  <span className="font-mono text-gray-400">{formatSize(Math.abs(size))}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Close Type */}
+          <div className="space-y-2">
+            <span className="text-[10px] text-gray-500 uppercase font-mono">Close Method</span>
+            <div className="flex p-1 bg-black/50 rounded-lg border border-white/10">
+              <button
+                onClick={() => setCloseType("market")}
+                className={`flex-1 py-2 text-xs font-bold uppercase rounded transition-all ${
+                  closeType === "market" ? "bg-white/10 text-white" : "text-gray-500 hover:text-white"
+                }`}
+              >
+                Market
+              </button>
+              <button
+                onClick={() => setCloseType("limit")}
+                className={`flex-1 py-2 text-xs font-bold uppercase rounded transition-all ${
+                  closeType === "limit" ? "bg-white/10 text-white" : "text-gray-500 hover:text-white"
+                }`}
+              >
+                Limit @ Mid
+              </button>
+            </div>
+            {closeType === "limit" && (
+              <p className="text-[10px] text-gray-500">
+                Each position will be closed with a limit order at the current mid market price.
+              </p>
+            )}
+          </div>
+
+          {/* Status */}
+          {status && (
+            <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+              status.type === "loading" ? "bg-blue-500/20 text-blue-400" :
+              status.type === "success" ? "bg-green-500/20 text-green-400" :
+              "bg-red-500/20 text-red-400"
+            }`}>
+              {status.type === "loading" && <Loader2 className="w-3 h-3 animate-spin" />}
+              {status.message}
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-white/10 space-y-2">
+          <button
+            onClick={handleCloseAll}
+            disabled={isSubmitting}
+            className="w-full py-3 bg-orange-600 text-white font-bold uppercase text-xs rounded-lg hover:bg-orange-500 transition-colors disabled:opacity-50"
+          >
+            {isSubmitting ? "Closing..." : `Close All at ${closeType === "market" ? "Market" : "Mid Price"}`}
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full py-3 bg-transparent text-gray-500 font-bold uppercase text-xs rounded-lg hover:text-white"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 };
 
@@ -286,6 +466,7 @@ const PositionsTab = ({ coin }: { coin: string }) => {
   const { positions, account, isLoading, error, refetch } = useHyperliquidAccount();
   const [mounted, setMounted] = useState(false);
   const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [closeAllModalOpen, setCloseAllModalOpen] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
   
   useEffect(() => setMounted(true), []);
@@ -350,6 +531,19 @@ const PositionsTab = ({ coin }: { coin: string }) => {
               <div className="text-[10px] text-gray-500 uppercase">Available</div>
               <div className="text-sm font-mono text-cyan-400">{formatValue(account.marginSummary.totalRawUsd)}</div>
             </div>
+          </div>
+        )}
+
+        {/* Close All Button */}
+        {positions.length > 0 && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setCloseAllModalOpen(true)}
+              className="px-3 py-1.5 bg-orange-600/20 text-orange-400 border border-orange-600/30 rounded text-[10px] font-bold uppercase hover:bg-orange-600/30 transition-colors flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              Close All ({positions.length})
+            </button>
           </div>
         )}
 
@@ -420,6 +614,14 @@ const PositionsTab = ({ coin }: { coin: string }) => {
           onSuccess={refetch}
         />
       )}
+
+      {/* Close All Positions Modal */}
+      <CloseAllPositionsModal
+        positions={positions}
+        isOpen={closeAllModalOpen}
+        onClose={() => setCloseAllModalOpen(false)}
+        onSuccess={refetch}
+      />
     </>
   );
 };
@@ -427,10 +629,36 @@ const PositionsTab = ({ coin }: { coin: string }) => {
 // ==================== OPEN ORDERS TAB ====================
 const OpenOrdersTab = ({ coin }: { coin: string }) => {
   const { isConnected } = useAccount();
-  const { orders, isLoading } = useHyperliquidOrders();
+  const { orders, isLoading, refetch } = useHyperliquidOrders();
   const [mounted, setMounted] = useState(false);
+  const [cancelingOid, setCancelingOid] = useState<number | null>(null);
+  const [cancelingAll, setCancelingAll] = useState(false);
   
   useEffect(() => setMounted(true), []);
+
+  const handleCancelOrder = async (coin: string, oid: number) => {
+    try {
+      setCancelingOid(oid);
+      await tradingApi.cancelOrder(coin, oid);
+      await refetch();
+    } catch (err) {
+      console.error('[OpenOrdersTab] Cancel order failed:', err);
+    } finally {
+      setCancelingOid(null);
+    }
+  };
+
+  const handleCancelAll = async () => {
+    try {
+      setCancelingAll(true);
+      await tradingApi.cancelAllOrders();
+      await refetch();
+    } catch (err) {
+      console.error('[OpenOrdersTab] Cancel all orders failed:', err);
+    } finally {
+      setCancelingAll(false);
+    }
+  };
 
   if (!mounted) {
     return (
@@ -462,40 +690,78 @@ const OpenOrdersTab = ({ coin }: { coin: string }) => {
   }
 
   return (
-    <div className="overflow-auto">
-      <table className="w-full text-[11px]">
-        <thead className="text-gray-500 border-b border-white/10">
-          <tr>
-            <th className="text-left py-2 px-2">Coin</th>
-            <th className="text-left py-2 px-2">Side</th>
-            <th className="text-left py-2 px-2">Type</th>
-            <th className="text-right py-2 px-2">Price</th>
-            <th className="text-right py-2 px-2">Size</th>
-            <th className="text-right py-2 px-2">Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredOrders.map((order) => (
-            <tr key={order.oid} className="border-b border-white/5 hover:bg-white/5">
-              <td className="py-2 px-2 font-medium text-white">{order.coin}</td>
-              <td className="py-2 px-2">
-                <span className={order.side === "B" ? "text-cyan-400" : "text-magenta-400"}>
-                  {order.side === "B" ? "Buy" : "Sell"}
-                </span>
-              </td>
-              <td className="py-2 px-2">
-                <span className="text-gray-400">
-                  {order.isTrigger ? (order.tpsl === "tp" ? "TP" : "SL") : "Limit"}
-                  {order.reduceOnly && " (Reduce)"}
-                </span>
-              </td>
-              <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(order.limitPx)}</td>
-              <td className="py-2 px-2 text-right font-mono text-white">{formatSize(order.sz)}</td>
-              <td className="py-2 px-2 text-right text-gray-500">{formatTime(order.timestamp)}</td>
+    <div className="space-y-2">
+      {/* Cancel All Button */}
+      <div className="flex justify-end px-2">
+        <button
+          onClick={handleCancelAll}
+          disabled={cancelingAll}
+          className="px-3 py-1.5 bg-red-600/20 text-red-400 border border-red-600/30 rounded text-[10px] font-bold uppercase hover:bg-red-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+        >
+          {cancelingAll ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Canceling...
+            </>
+          ) : (
+            <>
+              <X className="w-3 h-3" />
+              Cancel All ({filteredOrders.length})
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Orders Table */}
+      <div className="overflow-auto">
+        <table className="w-full text-[11px]">
+          <thead className="text-gray-500 border-b border-white/10">
+            <tr>
+              <th className="text-left py-2 px-2">Coin</th>
+              <th className="text-left py-2 px-2">Side</th>
+              <th className="text-left py-2 px-2">Type</th>
+              <th className="text-right py-2 px-2">Price</th>
+              <th className="text-right py-2 px-2">Size</th>
+              <th className="text-right py-2 px-2">Time</th>
+              <th className="text-right py-2 px-2">Action</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filteredOrders.map((order) => (
+              <tr key={order.oid} className="border-b border-white/5 hover:bg-white/5">
+                <td className="py-2 px-2 font-medium text-white">{order.coin}</td>
+                <td className="py-2 px-2">
+                  <span className={order.side === "B" ? "text-cyan-400" : "text-magenta-400"}>
+                    {order.side === "B" ? "Buy" : "Sell"}
+                  </span>
+                </td>
+                <td className="py-2 px-2">
+                  <span className="text-gray-400">
+                    {order.isTrigger ? (order.tpsl === "tp" ? "TP" : "SL") : "Limit"}
+                    {order.reduceOnly && " (Reduce)"}
+                  </span>
+                </td>
+                <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(order.limitPx)}</td>
+                <td className="py-2 px-2 text-right font-mono text-white">{formatSize(order.sz)}</td>
+                <td className="py-2 px-2 text-right text-gray-500">{formatTime(order.timestamp)}</td>
+                <td className="py-2 px-2 text-right">
+                  <button
+                    onClick={() => handleCancelOrder(order.coin, order.oid)}
+                    disabled={cancelingOid === order.oid}
+                    className="px-2 py-1 bg-red-600/20 text-red-400 border border-red-600/30 rounded text-[10px] font-bold uppercase hover:bg-red-600/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {cancelingOid === order.oid ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <X className="w-3 h-3" />
+                    )}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

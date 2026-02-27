@@ -22,7 +22,7 @@ export default function PerpetualPage() {
 
   // Percentages for splitters
   const [rightPanelWidth, setRightPanelWidth] = useState(25); // % width of right panel
-  const [bottomRowHeight, setBottomRowHeight] = useState(30); // % height of bottom row (History)
+  const [bottomRowHeight, setBottomRowHeight] = useState(40); // % height of bottom row (History)
   const [chartWidth, setChartWidth] = useState(70); // % width of chart vs orderbook
 
   const isDragging = useRef<"right" | "bottom" | "chart" | null>(null);
