@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { Users, Activity, GripVertical, GripHorizontal } from "lucide-react";
 
 import { GlassPanel } from "@/components/ui/GlassPanel";
@@ -12,6 +13,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 
 export default function MatchPage() {
+  const params = useParams();
+  const battleId = params?.id as string;
+
   const [rightPanelWidth, setRightPanelWidth] = useState(30); // %
   const [chatHeight, setChatHeight] = useState(40); // % height of chat relative to right col
   const [focusedPlayer, setFocusedPlayer] = useState<"p1" | "p2" | null>(null);
@@ -19,11 +23,13 @@ export default function MatchPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef<"vertical" | "horizontal" | null>(null);
 
-  const handleMouseDown = (type: "vertical" | "horizontal") => (e: React.MouseEvent) => {
-    isDragging.current = type;
-    document.body.style.cursor = type === "horizontal" ? "row-resize" : "col-resize";
-    e.preventDefault();
-  };
+  const handleMouseDown =
+    (type: "vertical" | "horizontal") => (e: React.MouseEvent) => {
+      isDragging.current = type;
+      document.body.style.cursor =
+        type === "horizontal" ? "row-resize" : "col-resize";
+      e.preventDefault();
+    };
 
   const handleMouseUp = () => {
     isDragging.current = null;
@@ -70,7 +76,9 @@ export default function MatchPage() {
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded border border-white/10">
               <Users size={14} className="text-gray-400" />
-              <span className="text-[10px] font-mono font-bold">14,204 Spec</span>
+              <span className="text-[10px] font-mono font-bold">
+                14,204 Spec
+              </span>
             </div>
             <ConnectWalletButton variant="page" />
           </div>
@@ -78,23 +86,40 @@ export default function MatchPage() {
       />
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-1 p-2 overflow-hidden relative z-10" ref={containerRef}>
+      <div
+        className="flex-1 p-2 overflow-hidden relative z-10"
+        ref={containerRef}
+      >
         <div className="flex h-full gap-1">
           {/* LEFT COLUMN: CHART */}
-          <div className="flex flex-col gap-1" style={{ width: `${100 - rightPanelWidth}%` }}>
+          <div
+            className="flex flex-col gap-1"
+            style={{ width: `${100 - rightPanelWidth}%` }}
+          >
             <GlassPanel className="flex-1 rounded-l-2xl">
-              <DuelChart focusedPlayer={focusedPlayer} setFocusedPlayer={setFocusedPlayer} />
+              <DuelChart
+                focusedPlayer={focusedPlayer}
+                setFocusedPlayer={setFocusedPlayer}
+              />
             </GlassPanel>
             {/* Stats Row */}
             <GlassPanel className="h-16 rounded-bl-2xl flex items-center px-6 justify-between border-t border-white/5">
               <div className="flex gap-8">
                 <div>
-                  <div className="text-[9px] text-gray-500 font-bold uppercase">Total Volume</div>
-                  <div className="text-sm font-mono font-bold text-white">$1,240,500</div>
+                  <div className="text-[9px] text-gray-500 font-bold uppercase">
+                    Total Volume
+                  </div>
+                  <div className="text-sm font-mono font-bold text-white">
+                    $1,240,500
+                  </div>
                 </div>
                 <div>
-                  <div className="text-[9px] text-gray-500 font-bold uppercase">24h Change</div>
-                  <div className="text-sm font-mono font-bold text-green-400">+12.4%</div>
+                  <div className="text-[9px] text-gray-500 font-bold uppercase">
+                    24h Change
+                  </div>
+                  <div className="text-sm font-mono font-bold text-green-400">
+                    +12.4%
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-[10px] font-mono text-gray-600">
@@ -105,24 +130,45 @@ export default function MatchPage() {
           </div>
 
           {/* VERTICAL SPLITTER */}
-          <div className="w-1 bg-black hover:bg-magenta-500/50 cursor-col-resize flex items-center justify-center transition-colors group z-50" onMouseDown={handleMouseDown("vertical")}>
-            <GripVertical size={12} className="text-gray-700 group-hover:text-white" />
+          <div
+            className="w-1 bg-black hover:bg-magenta-500/50 cursor-col-resize flex items-center justify-center transition-colors group z-50"
+            onMouseDown={handleMouseDown("vertical")}
+          >
+            <GripVertical
+              size={12}
+              className="text-gray-700 group-hover:text-white"
+            />
           </div>
 
           {/* RIGHT COLUMN: BETTING & CHAT */}
-          <div className="flex flex-col gap-1" style={{ width: `${rightPanelWidth}%` }}>
+          <div
+            className="flex flex-col gap-1"
+            style={{ width: `${rightPanelWidth}%` }}
+          >
             {/* TOP: BETTING */}
-            <GlassPanel className="flex-1 rounded-tr-2xl" style={{ height: `${100 - chatHeight}%` }}>
-              <BettingPanel />
+            <GlassPanel
+              className="flex-1 rounded-tr-2xl"
+              style={{ height: `${100 - chatHeight}%` }}
+            >
+              <BettingPanel battleId={battleId} />
             </GlassPanel>
 
             {/* HORIZONTAL SPLITTER */}
-            <div className="h-1 bg-black hover:bg-cyan-500/50 cursor-row-resize flex items-center justify-center transition-colors group z-50" onMouseDown={handleMouseDown("horizontal")}>
-              <GripHorizontal size={12} className="text-gray-700 group-hover:text-white" />
+            <div
+              className="h-1 bg-black hover:bg-cyan-500/50 cursor-row-resize flex items-center justify-center transition-colors group z-50"
+              onMouseDown={handleMouseDown("horizontal")}
+            >
+              <GripHorizontal
+                size={12}
+                className="text-gray-700 group-hover:text-white"
+              />
             </div>
 
             {/* BOTTOM: CHAT */}
-            <GlassPanel className="rounded-br-2xl" style={{ height: `${chatHeight}%` }}>
+            <GlassPanel
+              className="rounded-br-2xl"
+              style={{ height: `${chatHeight}%` }}
+            >
               <ChatPanel />
             </GlassPanel>
           </div>

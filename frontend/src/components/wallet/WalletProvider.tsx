@@ -2,12 +2,12 @@
 
 import React from "react";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { mainnet, arbitrum, base, optimism } from "wagmi/chains";
+import { mainnet, arbitrum, base, optimism, arbitrumSepolia } from "wagmi/chains";
 import { injected, coinbaseWallet } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const config = createConfig({
-  chains: [mainnet, arbitrum, base, optimism],
+  chains: [mainnet, arbitrum, base, optimism, arbitrumSepolia],
   connectors: [
     injected(),
     coinbaseWallet({ appName: "TradeClub" }),
@@ -17,6 +17,7 @@ const config = createConfig({
     [arbitrum.id]: http(),
     [base.id]: http(),
     [optimism.id]: http(),
+    [arbitrumSepolia.id]: http(),
   },
 });
 
