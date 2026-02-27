@@ -46,6 +46,7 @@ export const useHyperliquidOrderHistory = (): UseOrderHistoryReturn => {
 
   const fetchOrderHistory = useCallback(async () => {
     if (!address) {
+      console.log('[useHyperliquidOrderHistory] No user address, skipping fetch');
       setOrders([]);
       return;
     }
@@ -64,6 +65,7 @@ export const useHyperliquidOrderHistory = (): UseOrderHistoryReturn => {
         user: address,
       };
 
+      console.log('[useHyperliquidOrderHistory] Fetching order history for:', address);
       console.log('[useHyperliquidOrderHistory] Request:', JSON.stringify(requestBody));
 
       const response = await fetch(API_URL, {
@@ -88,11 +90,12 @@ export const useHyperliquidOrderHistory = (): UseOrderHistoryReturn => {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log('[useHyperliquidOrderHistory] Error:', errorText);
+        console.log('[useHyperliquidOrderHistory] Error response:', errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('[useHyperliquidOrderHistory] Received data:', data, 'Length:', (data || []).length);
       
       // Sort by statusTimestamp descending (newest first)
       const sorted = (data || []).sort((a: HistoricalOrder, b: HistoricalOrder) => 

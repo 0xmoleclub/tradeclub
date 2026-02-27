@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { useAccount, useConnect, useDisconnect, useEnsName, useBalance } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useEnsName, useBalance, useChainId, useSwitchChain } from "wagmi";
+import { arbitrum } from "wagmi/chains";
 import { formatUnits } from "viem";
 import { Wallet, LogOut, Copy, Check, ChevronDown, Zap, Shield, Loader2, AlertCircle } from "lucide-react";
 import { useAuth } from "@/hooks";
@@ -16,6 +17,8 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
   const { disconnect } = useDisconnect();
   const { data: ensName } = useEnsName({ address });
   const { data: balance } = useBalance({ address });
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
   
   // Auth state - using centralized hasAttemptedSign from auth context
   const { isAuthenticated, isSigning, hasAttemptedSign, signIn, signOut, error: authError, clearError } = useAuth();
@@ -25,11 +28,23 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Check if on correct network
+  const isCorrectNetwork = chainId === arbitrum.id;
+  const isWrongNetwork = isConnected && !isCorrectNetwork;
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Auto-switch to Arbitrum when connected to wrong network
+  useEffect(() => {
+    if (isWrongNetwork && switchChain && mounted) {
+      console.log(`[ConnectWalletButton] Wrong network detected (chainId: ${chainId}), switching to Arbitrum...`);
+      switchChain({ chainId: arbitrum.id });
+    }
+  }, [isWrongNetwork, chainId, switchChain, mounted]);
 
   const truncatedAddress = address
     ? `${address.slice(0, 6)}...${address.slice(-4)}`
@@ -97,8 +112,49 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     );
   }
 
-  // ==================== STATE 1: FULLY AUTHENTICATED ====================
-  if (isAuthenticated) {
+  // ==================== STATE 1: WRONG NETWORK ====================
+  // Connected to wrong network - prompt to switch to Arbitrum
+  if (isWrongNetwork) {
+    return (
+      <div className="relative">
+        <button
+          onClick={() => switchChain?.({ chainId: arbitrum.id })}
+          className={`group relative overflow-hidden cursor-pointer ${variant === "navbar" ? "skew-x-[-15deg] transform" : ""}`}
+        >
+          {/* Red/Orange glow for wrong network */}
+          <div className="absolute -inset-[1px] bg-gradient-to-r from-orange-500 via-red-500 to-orange-500 opacity-60 blur-[1px] animate-pulse" />
+          <div className={`relative flex items-center gap-3 border border-orange-500/50 transition-all duration-300 hover:border-orange-400 ${variant === "navbar" ? "px-5 py-2.5 bg-black" : "px-4 py-2 rounded-lg bg-black/80 backdrop-blur-sm"}`}>
+            <div className={`${variant === "navbar" ? "skew-x-[15deg]" : ""}`}>
+              <AlertCircle className="w-4 h-4 text-orange-400 animate-pulse" />
+            </div>
+            <span className={`font-mono text-[11px] font-bold text-white tracking-wider ${variant === "navbar" ? "skew-x-[15deg]" : ""}`}>
+              Switch to Arbitrum
+            </span>
+          </div>
+        </button>
+
+        {/* Wrong Network Warning */}
+        <div className="absolute top-[calc(100%+8px)] right-0 w-80 z-[99999]">
+          <div className="bg-[#0a0a0a] border border-orange-500/30 rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] backdrop-blur-xl overflow-hidden p-4">
+            <div className="flex items-center gap-2 text-orange-400 mb-2">
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-xs font-bold uppercase">Wrong Network</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mb-3">This app only works on Arbitrum. Please switch your network.</p>
+            <button
+              onClick={() => switchChain?.({ chainId: arbitrum.id })}
+              className="w-full py-2 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded text-[10px] font-bold uppercase hover:bg-orange-500/30 transition-colors"
+            >
+              Switch to Arbitrum
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ==================== STATE 2: FULLY AUTHENTICATED ====================
+  if (isAuthenticated && isCorrectNetwork) {
     return (
       <div className="relative" ref={dropdownRef}>
         <button
@@ -173,7 +229,7 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     );
   }
 
-  // ==================== STATE 2: CONNECTING WALLET ====================
+  // ==================== STATE 3: CONNECTING WALLET ====================
   // Show when actively connecting (before connection is established)
   if (isConnecting && !isConnected) {
     return (
@@ -211,7 +267,7 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     );
   }
 
-  // ==================== STATE 3: SIGNING IN PROGRESS ====================
+  // ==================== STATE 4: SIGNING IN PROGRESS ====================
   // Wallet connected and currently signing (waiting for signature)
   if (isSigning) {
     return (
@@ -231,9 +287,10 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     );
   }
 
-  // ==================== STATE 4: WALLET CONNECTED, NEEDS AUTH ====================
-  // Wallet is connected but not yet authenticated - show "Sign to Authenticate" button
-  if (isConnected && !isAuthenticated && !isSigning && !authError) {
+  // ==================== STATE 5: WALLET CONNECTED, NEEDS AUTH ====================
+  // Wallet is connected but not yet authenticated - show "Sign In" button
+  // Only allow if on correct network
+  if (isConnected && isCorrectNetwork && !isAuthenticated && !isSigning && !authError) {
     return (
       <div className="relative">
         <button
@@ -262,7 +319,7 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     );
   }
 
-  // ==================== STATE 5: AUTH ERROR ====================
+  // ==================== STATE 6: AUTH ERROR ====================
   // Connected but sign failed
   if (authError) {
     return (
@@ -299,7 +356,7 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     );
   }
 
-  // ==================== STATE 6: DISCONNECTED ====================
+  // ==================== STATE 7: DISCONNECTED ====================
   // Default state - wallet not connected, clickable
   return (
     <div className="relative" ref={dropdownRef}>
@@ -320,7 +377,7 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
           </div>
           {/* Text */}
           <span className={`relative z-10 text-[11px] font-black uppercase tracking-[0.2em] text-neon group-hover:text-white transition-colors duration-200 ${variant === "navbar" ? "skew-x-[15deg]" : ""}`} style={{ textShadow: "0 0 8px rgba(208,0,255,0.5)" }}>
-            Connect
+            Connect Wallet
           </span>
           {/* Decorative corner accents */}
           <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-neon/50 group-hover:border-neon transition-colors" />
@@ -335,7 +392,7 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
             <div className="h-[1px] bg-gradient-to-r from-transparent via-neon to-transparent" />
             <div className="px-4 pt-4 pb-3">
               <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white font-rajdhani">Select Wallet</h3>
-              <p className="text-[10px] text-gray-600 font-mono mt-1 uppercase tracking-wider">Connect & Sign in one flow</p>
+              <p className="text-[10px] text-gray-600 font-mono mt-1 uppercase tracking-wider">Choose your wallet to connect</p>
             </div>
             <div className="px-2 pb-2 space-y-1">
               {connectors.map((connector) => {

@@ -23,6 +23,7 @@ import {
   useHyperliquidFunding,
   useHyperliquidOrderHistory,
   useAuth,
+  useAgentWallet,
   type Position,
   type OpenOrder,
   type UserFill,
@@ -307,7 +308,8 @@ const PositionsTab = ({ coin }: { coin: string }) => {
     return <ConnectWalletPrompt message="Connect your wallet to view positions" />;
   }
 
-  const filteredPositions = coin ? positions.filter((p) => p.coin === coin) : positions;
+  // Show all positions regardless of current coin
+  const filteredPositions = positions;
 
   if (isLoading && positions.length === 0) {
     return (
@@ -443,7 +445,8 @@ const OpenOrdersTab = ({ coin }: { coin: string }) => {
     return <ConnectWalletPrompt message="Connect your wallet to view open orders" />;
   }
 
-  const filteredOrders = coin ? orders.filter((o) => o.coin === coin) : orders;
+  // Show all orders regardless of current coin
+  const filteredOrders = orders;
 
   if (isLoading && orders.length === 0) {
     return (
@@ -500,11 +503,42 @@ const OpenOrdersTab = ({ coin }: { coin: string }) => {
 // ==================== TWAP TAB ====================
 const TwapTab = ({ coin }: { coin: string }) => {
   const { isConnected } = useAccount();
-  const { twapFills, isLoading } = useHyperliquidTwap();
+  const { twapFills, isLoading: twapLoading } = useHyperliquidTwap();
+  const { openOrders, isLoading: ordersLoading } = useHyperliquidOrders();
   const [mounted, setMounted] = useState(false);
+  const [twapSubTab, setTwapSubTab] = useState<"active" | "fills">("fills");
   
+  // All hooks must be called before any conditional returns
   useEffect(() => setMounted(true), []);
 
+  // Filter for TWAP orders from open orders
+  // TWAP orders might have a specific field to identify them - we'll check all possible indicators
+  const activeTwaps = (openOrders || []).filter(order => 
+    order.orderType?.toLowerCase().includes('twap') || 
+    (order as any).isTwap === true ||
+    (order as any).twapId !== undefined
+  );
+
+  // Debug: Log sample active orders when they exist
+  useEffect(() => {
+    if ((openOrders || []).length > 0 && activeTwaps.length === 0) {
+      console.log('[TwapTab] Sample active orders (checking for TWAP):', 
+        (openOrders || []).slice(0, 3).map(o => ({
+          orderType: o.orderType,
+          tif: o.tif,
+          coin: o.coin,
+          allKeys: Object.keys(o)
+        }))
+      );
+    }
+  }, [openOrders, activeTwaps]);
+
+  // Show all TWAP fills regardless of current coin
+  const filteredTwapFills = twapFills || [];
+
+  const isLoading = twapLoading || ordersLoading;
+
+  // Now conditional returns are safe
   if (!mounted) {
     return (
       <div className="h-48 flex flex-col items-center justify-center text-gray-500 gap-2">
@@ -515,12 +549,10 @@ const TwapTab = ({ coin }: { coin: string }) => {
   }
 
   if (!isConnected) {
-    return <ConnectWalletPrompt message="Connect your wallet to view TWAP fills" />;
+    return <ConnectWalletPrompt message="Connect your wallet to view TWAP orders" />;
   }
 
-  const filteredTwapFills = coin ? twapFills.filter((t) => t.fill.coin === coin) : twapFills;
-
-  if (isLoading && twapFills.length === 0) {
+  if (isLoading && (twapFills || []).length === 0 && (openOrders || []).length === 0) {
     return (
       <div className="h-48 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
@@ -528,40 +560,124 @@ const TwapTab = ({ coin }: { coin: string }) => {
     );
   }
 
-  if (filteredTwapFills.length === 0) {
-    return <EmptyState icon={Zap} title="No TWAP fills" subtitle="TWAP order slices will appear here" />;
-  }
-
   return (
-    <div className="overflow-auto">
-      <table className="w-full text-[11px]">
-        <thead className="text-gray-500 border-b border-white/10">
-          <tr>
-            <th className="text-left py-2 px-2">Time</th>
-            <th className="text-left py-2 px-2">Coin</th>
-            <th className="text-left py-2 px-2">Side</th>
-            <th className="text-right py-2 px-2">Price</th>
-            <th className="text-right py-2 px-2">Size</th>
-            <th className="text-right py-2 px-2">TWAP ID</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredTwapFills.slice(0, 100).map((twap, idx) => (
-            <tr key={`${twap.twapId}-${twap.fill.tid}-${idx}`} className="border-b border-white/5 hover:bg-white/5">
-              <td className="py-2 px-2 text-gray-500">{formatTime(twap.fill.time)}</td>
-              <td className="py-2 px-2 font-medium text-white">{twap.fill.coin}</td>
-              <td className="py-2 px-2">
-                <span className={twap.fill.side === "B" ? "text-cyan-400" : "text-magenta-400"}>
-                  {twap.fill.side === "B" ? "Buy" : "Sell"}
-                </span>
-              </td>
-              <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(twap.fill.px)}</td>
-              <td className="py-2 px-2 text-right font-mono text-white">{formatSize(twap.fill.sz)}</td>
-              <td className="py-2 px-2 text-right font-mono text-gray-400">#{twap.twapId}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="flex flex-col h-full">
+      {/* TWAP Sub-tabs */}
+      <div className="flex border-b border-white/10 mb-2">
+        <button
+          onClick={() => setTwapSubTab("active")}
+          className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-all ${
+            twapSubTab === "active"
+              ? "text-cyan-400 border-b-2 border-cyan-400"
+              : "text-gray-500 hover:text-gray-300"
+          }`}
+        >
+          Active
+        </button>
+        <button
+          onClick={() => setTwapSubTab("fills")}
+          className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-all ${
+            twapSubTab === "fills"
+              ? "text-cyan-400 border-b-2 border-cyan-400"
+              : "text-gray-500 hover:text-gray-300"
+          }`}
+        >
+          Fill History
+        </button>
+      </div>
+
+      {/* TWAP Content */}
+      <div className="flex-1 overflow-auto">
+        {twapSubTab === "active" && (
+          <>
+            <div className="px-4 py-2 bg-cyan-500/10 border-b border-cyan-500/20 mb-2">
+              <p className="text-[10px] text-cyan-400 font-medium">
+                Active TWAP orders that are currently being executed over time.
+              </p>
+            </div>
+            {activeTwaps.length === 0 ? (
+              <EmptyState icon={Zap} title="No active TWAP orders" subtitle="Your active TWAP orders will appear here" />
+            ) : (
+              <table className="w-full text-[11px]">
+                <thead className="text-gray-500 border-b border-white/10 sticky top-0 bg-black">
+                  <tr>
+                    <th className="text-left py-2 px-2">Coin</th>
+                    <th className="text-left py-2 px-2">Side</th>
+                    <th className="text-right py-2 px-2">Size</th>
+                    <th className="text-right py-2 px-2">Limit Price</th>
+                    <th className="text-right py-2 px-2">Filled</th>
+                    <th className="text-left py-2 px-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeTwaps.map((order, idx) => (
+                    <tr key={`${order.oid}-${idx}`} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="py-2 px-2 font-medium text-white">{order.coin}</td>
+                      <td className="py-2 px-2">
+                        <span className={order.side === "B" ? "text-cyan-400" : "text-magenta-400"}>
+                          {order.side === "B" ? "Buy" : "Sell"}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono text-white">{formatSize(order.sz)}</td>
+                      <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(order.limitPx)}</td>
+                      <td className="py-2 px-2 text-right font-mono text-gray-400">
+                        {formatSize((parseFloat(order.origSz || order.sz) - parseFloat(order.sz)).toString())} / {formatSize(order.origSz || order.sz)}
+                      </td>
+                      <td className="py-2 px-2">
+                        <span className="text-cyan-400 text-xs">Running</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+
+        {twapSubTab === "fills" && (
+          <>
+            <div className="px-4 py-2 bg-cyan-500/10 border-b border-cyan-500/20 mb-2">
+              <p className="text-[10px] text-cyan-400 font-medium">
+                TWAP (Time-Weighted Average Price) orders are executed as multiple smaller fills over time. Below are the individual slice fills.
+              </p>
+            </div>
+            {filteredTwapFills.length === 0 ? (
+              <EmptyState icon={Zap} title="No TWAP fills" subtitle="TWAP order slices will appear here" />
+            ) : (
+              <table className="w-full text-[11px]">
+                <thead className="text-gray-500 border-b border-white/10 sticky top-0 bg-black">
+                  <tr>
+                    <th className="text-left py-2 px-2">Time</th>
+                    <th className="text-left py-2 px-2">Coin</th>
+                    <th className="text-left py-2 px-2">Side</th>
+                    <th className="text-right py-2 px-2">Price</th>
+                    <th className="text-right py-2 px-2">Size</th>
+                    <th className="text-right py-2 px-2">Fee</th>
+                    <th className="text-right py-2 px-2">TWAP ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTwapFills.slice(0, 100).map((twap, idx) => (
+                    <tr key={`${twap.twapId}-${twap.fill.tid}-${idx}`} className="border-b border-white/5 hover:bg-white/5">
+                      <td className="py-2 px-2 text-gray-500">{formatTime(twap.fill.time)}</td>
+                      <td className="py-2 px-2 font-medium text-white">{twap.fill.coin}</td>
+                      <td className="py-2 px-2">
+                        <span className={twap.fill.side === "B" ? "text-cyan-400" : "text-magenta-400"}>
+                          {twap.fill.side === "B" ? "Buy" : "Sell"}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(twap.fill.px)}</td>
+                      <td className="py-2 px-2 text-right font-mono text-white">{formatSize(twap.fill.sz)}</td>
+                      <td className="py-2 px-2 text-right font-mono text-gray-400">${twap.fill.fee}</td>
+                      <td className="py-2 px-2 text-right font-mono text-gray-400">#{twap.twapId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 };

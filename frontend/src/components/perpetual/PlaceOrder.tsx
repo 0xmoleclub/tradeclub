@@ -13,7 +13,8 @@ import {
   X,
   Settings2
 } from "lucide-react";
-import { useAccount } from "wagmi";
+import { useChainId } from "wagmi";
+import { arbitrum } from "wagmi/chains";
 import { tradingApi, agentWalletApi } from "@/services/trading";
 import { useHyperliquidAccount } from "@/hooks/useHyperliquidAccount";
 import { useAuth } from "@/hooks";
@@ -40,6 +41,10 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
   const coin = symbol.split("-")[0];
   const { isConnected: isWalletConnected, isSigning, signIn, canTrade } = useAuth();
   const { account, refetch: refetchAccount } = useHyperliquidAccount();
+  const chainId = useChainId();
+  
+  // Check if on correct network
+  const isCorrectNetwork = chainId === arbitrum.id;
 
   // Market metadata for leverage
   const [marketMeta, setMarketMeta] = useState<MarketMeta | null>(null);
@@ -168,6 +173,11 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
 
   // Place order - ONLY for opening positions
   const handlePlaceOrder = async () => {
+    if (!isCorrectNetwork) {
+      setOrderStatus({ type: "error", message: "Please switch to Arbitrum network" });
+      return;
+    }
+
     if (!isWalletConnected) {
       setOrderStatus({ type: "error", message: "Please connect your wallet first" });
       return;

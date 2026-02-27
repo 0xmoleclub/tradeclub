@@ -102,7 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [isWalletConnected, state.status]);
 
-  // Auto sign-in when connected (one attempt)
+  // Auto sign-in when connected (DISABLED - users must manually click "Sign In")
+  // Uncomment the effect below to enable auto-sign behavior
+  /*
   useEffect(() => {
     if (!isInitializedRef.current) return;
     
@@ -127,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWalletConnected, address, state.status, state.hasAttemptedSign, state.error]);
+  */
 
   // Sign In Flow
   const signIn = useCallback(async () => {
