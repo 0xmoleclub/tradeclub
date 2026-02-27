@@ -3,6 +3,7 @@ import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PredictionMarketService } from '@modules/prediction-market/services/prediction-market.service';
 import {
   BattleMarketsResponseDto,
+  ChainInfoResponseDto,
   UserPositionResponseDto,
 } from '../dto/battle-prediction.dto';
 
@@ -53,5 +54,24 @@ export class BattlePredictionController {
     @Query('walletAddress') walletAddress: string,
   ): Promise<UserPositionResponseDto> {
     return this.predictionMarket.getUserPosition(questionId, walletAddress);
+  }
+
+  /**
+   * GET /battle/:battleId/markets/:questionId/chain-info
+   *
+   * Returns the onchain contract addresses the frontend needs to call
+   * PredictionMarket.buy() or sell() directly (non-custodial dApp flow):
+   * - marketAddress: prediction market contract (null if not yet deployed)
+   * - usdcAddress: USDC/stablecoin contract to approve before buying
+   * - chainId: EVM chain ID
+   */
+  @Get(':questionId/chain-info')
+  @ApiOperation({
+    summary: 'Get onchain contract addresses for direct client-side trading',
+  })
+  async getChainInfo(
+    @Param('questionId') questionId: string,
+  ): Promise<ChainInfoResponseDto> {
+    return this.predictionMarket.getMarketChainInfo(questionId);
   }
 }

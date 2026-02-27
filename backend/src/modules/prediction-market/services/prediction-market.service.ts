@@ -8,6 +8,8 @@ import {
 import { Queue } from 'bullmq';
 import { CONTRACT_CALL_QUEUE } from '../constants/queues.constants';
 import { PrismaService } from '@/database/prisma.service';
+import { ConfigService } from '@nestjs/config';
+import { ChainConfig } from '@config/chain.config';
 import {
   OrderbookLevel,
   OrderbookResponse,
@@ -27,6 +29,7 @@ export class PredictionMarketService {
     @InjectQueue(CONTRACT_CALL_QUEUE)
     private readonly contractCallQueue: Queue,
     private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
   ) {}
 
   async enqueueCreateMarket(params: CreateMarketJob): Promise<void> {
@@ -124,13 +127,38 @@ export class PredictionMarketService {
     };
   }
 
+  /**
+   * Returns the onchain contract addresses and chain ID needed by the
+   * frontend to call PredictionMarket.buy() / sell() directly.
+   * Used by GET /battle/:battleId/markets/:questionId/chain-info
+   */
+  async getMarketChainInfo(questionId: string): Promise<{
+    marketAddress: string | null;
+    usdcAddress: string;
+    chainId: number;
+  }> {
+    const question =
+      await this.prisma.battlePredictionQuestion.findUniqueOrThrow({
+        where: { id: questionId },
+        select: { marketAddress: true },
+      });
+    const chain = this.config.getOrThrow<ChainConfig>('chain');
+    return {
+      marketAddress: question.marketAddress ?? null,
+      usdcAddress: chain.evm.contracts.stablecoin,
+      chainId: chain.evm.chainId,
+    };
+  }
+
   // ── Battle-scoped read methods ─────────────────────────────────────────────
 
   /**
    * Returns all prediction markets for a battle with live LMSR spot prices.
    * Used by GET /battle/:battleId/markets
    */
-  async getMarketsByBattle(battleId: string): Promise<BattleMarketsResponseDto> {
+  async getMarketsByBattle(
+    battleId: string,
+  ): Promise<BattleMarketsResponseDto> {
     const questions = await this.prisma.battlePredictionQuestion.findMany({
       where: { battleId },
       include: {
@@ -203,7 +231,10 @@ export class PredictionMarketService {
       });
 
     const trades = await this.prisma.battlePredictionTrade.findMany({
-      where: { battlePredictionQuestionId: questionId, userAddress: walletAddress },
+      where: {
+        battlePredictionQuestionId: questionId,
+        userAddress: walletAddress,
+      },
       orderBy: { createdAt: 'asc' },
     });
 
