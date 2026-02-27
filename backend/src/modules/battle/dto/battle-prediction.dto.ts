@@ -56,3 +56,15 @@ export class UserPositionResponseDto {
   /** Total USD spent on BUY trades */
   totalCostUsd: string;
 }
+
+/**
+ * Everything the frontend needs to call the onchain PredictionMarket
+ */
+export class ChainInfoResponseDto {
+  /** Prediction market contract address (null if not yet deployed) */
+  marketAddress: string | null;
+  /** USDC (stablecoin) contract address */
+  usdcAddress: string;
+  /** EVM chain ID the contracts are deployed on */
+  chainId: number;
+}
