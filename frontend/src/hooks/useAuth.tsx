@@ -43,32 +43,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const isInitializedRef = useRef(false);
+  const hasCheckedInitialAuthRef = useRef(false);
 
   // Check for existing auth on mount (client-side only)
   useEffect(() => {
+    // Only run once on initial mount
+    if (hasCheckedInitialAuthRef.current) return;
     if (typeof window === 'undefined') return;
     
     const token = authApi.getToken();
+    
+    // If we have a token, restore authenticated state immediately
+    // Don't wait for wallet connection state (Wagmi might still be hydrating)
     if (token) {
       setState(prev => ({
         ...prev,
         status: 'authenticated',
       }));
     }
-    isInitializedRef.current = true;
+    
+    hasCheckedInitialAuthRef.current = true;
+    
+    // Small delay before marking as initialized to let Wagmi hydrate
+    setTimeout(() => {
+      isInitializedRef.current = true;
+    }, 100);
   }, []);
 
   // Update status when wallet connection changes
   useEffect(() => {
-    // Only run after initial mount
+    // Only run after initial mount and hydration
     if (!isInitializedRef.current) return;
 
-    // Wallet just connected and we're in idle state -> move to connected
-    if (isWalletConnected && state.status === 'idle') {
-      setState(prev => ({ ...prev, status: 'connected' }));
+    // Wallet just connected (not on initial mount)
+    if (isWalletConnected && (state.status === 'idle' || state.status === 'error')) {
+      const token = authApi.getToken();
+      if (token) {
+        setState(prev => ({ ...prev, status: 'authenticated' }));
+      } else {
+        setState(prev => ({ ...prev, status: 'connected', hasAttemptedSign: false }));
+      }
     }
     
-    // Wallet disconnected -> reset everything
+    // Wallet disconnected after initialization -> reset everything
     if (!isWalletConnected && state.status !== 'idle') {
       authApi.logout();
       setState({
@@ -77,6 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error: null,
         hasAttemptedSign: false,
       });
+    }
+    
+    // After initialization, if we have a token but no wallet, clear the stale token
+    if (!isWalletConnected && authApi.getToken()) {
+      authApi.logout();
     }
   }, [isWalletConnected, state.status]);
 
@@ -89,20 +111,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 2. Status is 'connected' (not yet authenticated)
     // 3. Haven't attempted sign yet
     // 4. No error
-    if (isWalletConnected && state.status === 'connected' && !state.hasAttemptedSign && !state.error) {
+    // 5. Address exists
+    if (isWalletConnected && address && state.status === 'connected' && !state.hasAttemptedSign && !state.error) {
       setState(prev => ({ ...prev, hasAttemptedSign: true }));
       
-      // Small delay to ensure wallet is ready
+      // Longer delay to ensure wallet is fully ready
       const timer = setTimeout(() => {
-        console.log('[useAuth] Auto-triggering sign-in');
-        signIn().catch((err) => {
-          console.error('[useAuth] Auto sign-in failed:', err);
+        signIn().catch(() => {
+          // Reset hasAttemptedSign on failure so user can retry
+          setState(prev => ({ ...prev, hasAttemptedSign: false }));
         });
-      }, 300);
+      }, 500);
       
       return () => clearTimeout(timer);
     }
-  }, [isWalletConnected, state.status, state.hasAttemptedSign, state.error]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWalletConnected, address, state.status, state.hasAttemptedSign, state.error]);
 
   // Sign In Flow
   const signIn = useCallback(async () => {

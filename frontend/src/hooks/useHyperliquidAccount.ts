@@ -123,8 +123,8 @@ export const useHyperliquidAccount = (): UseAccountReturn => {
   useEffect(() => {
     fetchAccount();
     
-    // Increase polling interval to reduce rate limiting
-    const interval = setInterval(fetchAccount, 15000);
+    // Reduce polling interval for more real-time updates (5 seconds)
+    const interval = setInterval(fetchAccount, 5000);
     return () => {
       clearInterval(interval);
       if (abortControllerRef.current) {

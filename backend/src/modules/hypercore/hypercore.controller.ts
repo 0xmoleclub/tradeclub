@@ -147,8 +147,8 @@ export class HypercoreController {
 
   @Post('leverage')
   @ApiOperation({
-    summary: 'Update leverage',
-    description: 'Updates leverage for a specific trading pair (isolated margin)',
+    summary: 'Update leverage (isolated-only)',
+    description: 'Updates leverage for a specific trading pair. TradeClub uses isolated margin only.',
   })
   async updateLeverage(@CurrentUser() user: Payload, @Body() dto: UpdateLeverageDto) {
     return this.hypercoreService.updateLeverage(user.id, dto);
@@ -156,8 +156,8 @@ export class HypercoreController {
 
   @Post('margin/isolated')
   @ApiOperation({
-    summary: 'Switch to isolated margin',
-    description: 'Switches asset to isolated margin mode with max leverage',
+    summary: 'Set isolated margin with max leverage',
+    description: 'Sets asset to isolated margin mode with maximum available leverage',
   })
   async setIsolatedMode(@CurrentUser() user: Payload, @Body() dto: SetIsolatedModeDto) {
     return this.hypercoreService.setIsolatedMode(user.id, dto);

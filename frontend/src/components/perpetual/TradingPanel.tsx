@@ -157,13 +157,14 @@ const ClosePositionModal = ({ position, isOpen, onClose, onSuccess }: ClosePosit
       if (closeType === "market") {
         response = await tradingApi.closeMarketOrder({
           coin: position.coin,
-          size,
+          size: size.toString(),
         });
       } else {
         response = await tradingApi.closeLimitOrder({
           coin: position.coin,
-          size,
-          price,
+          size: size.toString(),
+          price: price.toString(),
+          postOnly: false,
         });
       }
 
@@ -367,7 +368,7 @@ const PositionsTab = ({ coin }: { coin: string }) => {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-bold text-white">{pos.coin}</span>
                   <span className={`text-[10px] px-2 py-0.5 rounded ${isLong ? "bg-cyan-500/20 text-cyan-400" : "bg-magenta-500/20 text-magenta-400"}`}>
-                    {isLong ? "LONG" : "SHORT"} {leverage.toFixed(0)}x
+                    {isLong ? "LONG" : "SHORT"} {leverage.toFixed(0)}x Isolated
                   </span>
                 </div>
                 <div className="flex items-center gap-3">

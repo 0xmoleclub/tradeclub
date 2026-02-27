@@ -275,7 +275,6 @@ export const MarketHeader = ({ selectedMarket, onMarketChange }: MarketHeaderPro
           >
             <span className="text-lg font-black font-['Rajdhani'] italic text-white">
               {currentMarket?.coin || selectedMarket.split('-')[0]}
-              <span className="text-gray-500">-PERP</span>
             </span>
             <span className="text-base font-mono text-cyan-400">
               {formatPrice(currentMarket?.markPrice || 0)}
@@ -412,7 +411,6 @@ export const MarketHeader = ({ selectedMarket, onMarketChange }: MarketHeaderPro
                         <div className="text-left">
                           <div className="text-xs font-bold text-white">
                             {market.coin}
-                            <span className="text-gray-500 font-normal text-[10px]">-PERP</span>
                           </div>
                           <div className="text-[9px] text-gray-500">
                             {market.maxLeverage}x • OI: {formatNumber(market.openInterest)}

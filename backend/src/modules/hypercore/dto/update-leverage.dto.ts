@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsBoolean } from 'class-validator';
+import { IsString, IsNumber, IsBoolean, IsOptional } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateLeverageDto {
@@ -10,7 +11,13 @@ export class UpdateLeverageDto {
   @IsNumber()
   leverage: number;
 
-  @ApiProperty({ description: 'Is cross margin (true) or isolated (false)', default: true })
+  @ApiProperty({ description: 'Always isolated margin (isolated-only perpetuals)', default: false, required: false })
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
   @IsBoolean()
-  isCross: boolean;
+  @IsOptional()
+  isCross?: boolean;
 }

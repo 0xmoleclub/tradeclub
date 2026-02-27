@@ -231,7 +231,38 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     );
   }
 
-  // ==================== STATE 4: AUTH ERROR ====================
+  // ==================== STATE 4: WALLET CONNECTED, NEEDS AUTH ====================
+  // Wallet is connected but not yet authenticated - show "Sign to Authenticate" button
+  if (isConnected && !isAuthenticated && !isSigning && !authError) {
+    return (
+      <div className="relative">
+        <button
+          onClick={handleRetrySign}
+          className={`group relative overflow-hidden cursor-pointer ${variant === "navbar" ? "skew-x-[-15deg] transform" : ""}`}
+        >
+          {/* Yellow glow for needs-auth state */}
+          <div className="absolute -inset-[1px] bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-500 opacity-60 blur-[1px]" />
+          <div className={`relative flex items-center gap-3 border border-yellow-500/50 transition-all duration-300 hover:border-yellow-400 ${variant === "navbar" ? "px-5 py-2.5 bg-black" : "px-4 py-2 rounded-lg bg-black/80 backdrop-blur-sm"}`}>
+            {/* Status dot */}
+            <div className={`relative flex h-2 w-2 ${variant === "navbar" ? "skew-x-[15deg]" : ""}`}>
+              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-400" />
+            </div>
+            {/* Shield icon */}
+            <div className={variant === "navbar" ? "skew-x-[15deg]" : ""}>
+              <Shield size={14} className="text-yellow-400" />
+            </div>
+            {/* Text */}
+            <span className={`font-mono text-[11px] font-bold text-white tracking-wider ${variant === "navbar" ? "skew-x-[15deg]" : ""}`}>
+              Sign In
+            </span>
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  // ==================== STATE 5: AUTH ERROR ====================
   // Connected but sign failed
   if (authError) {
     return (
@@ -268,7 +299,7 @@ export const ConnectWalletButton = ({ variant = "navbar" }: ConnectWalletButtonP
     );
   }
 
-  // ==================== STATE 5: DISCONNECTED ====================
+  // ==================== STATE 6: DISCONNECTED ====================
   // Default state - wallet not connected, clickable
   return (
     <div className="relative" ref={dropdownRef}>

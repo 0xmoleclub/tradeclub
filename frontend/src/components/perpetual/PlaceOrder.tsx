@@ -65,6 +65,7 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
   // Order status
   const [orderStatus, setOrderStatus] = useState<OrderStatus | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUpdatingLeverage, setIsUpdatingLeverage] = useState(false);
 
   // Fetch market metadata (for max leverage)
   const fetchMarketMeta = useCallback(async () => {
@@ -118,12 +119,12 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
     return () => clearInterval(interval);
   }, [fetchMarketMeta, fetchMarkPrice]);
 
-  // Update price when switching to limit or when mark price updates (if price is empty)
+  // Update price when coin changes (in limit mode) or when switching to limit mode
   useEffect(() => {
-    if (orderType === "limit" && price === "" && markPrice > 0) {
+    if (orderType === "limit" && markPrice > 0) {
       setPrice(markPrice.toFixed(2));
     }
-  }, [orderType, markPrice, price]);
+  }, [orderType, coin, markPrice]);
 
   // Ensure agent wallet
   const ensureAgentWallet = async () => {
@@ -142,12 +143,15 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
 
   // Update leverage via API
   const handleLeverageUpdate = async () => {
-    if (!canTrade || tempLeverage === currentLeverage) {
-      setShowLeverageModal(false);
+    if (!canTrade || tempLeverage === currentLeverage || isUpdatingLeverage) {
+      if (!isUpdatingLeverage) {
+        setShowLeverageModal(false);
+      }
       return;
     }
     
     try {
+      setIsUpdatingLeverage(true);
       setOrderStatus({ type: "loading", message: "Updating leverage..." });
       await tradingApi.updateLeverage(coin, tempLeverage);
       setCurrentLeverage(tempLeverage);
@@ -157,6 +161,8 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
     } catch (err: any) {
       setOrderStatus({ type: "error", message: err.message || "Failed to update leverage" });
       setTimeout(() => setOrderStatus(null), 3000);
+    } finally {
+      setIsUpdatingLeverage(false);
     }
   };
 
@@ -198,10 +204,17 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
 
       // Open position only
       if (orderType === "market") {
-        response = await tradingApi.openMarketOrder({ coin, isBuy, size });
+        response = await tradingApi.openMarketOrder({ 
+          coin, 
+          isBuy, 
+          size: size.toString() 
+        });
       } else {
         response = await tradingApi.openLimitOrder({ 
-          coin, isBuy, price, size,
+          coin, 
+          isBuy, 
+          price: price.toString(), 
+          size: size.toString(),
           postOnly: false 
         });
       }
@@ -214,9 +227,9 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
           await tradingApi.placeTakeProfit({
             coin,
             isBuy: positionIsBuy,
-            size,
-            takeProfitPrice: tpPrice,
-            takeProfitTrigger: tpPrice,
+            size: size.toString(),
+            takeProfitPrice: tpPrice.toString(),
+            takeProfitTrigger: tpPrice.toString(),
           });
         }
         
@@ -224,20 +237,39 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
           await tradingApi.placeStopLoss({
             coin,
             isBuy: positionIsBuy,
-            size,
-            stopLossPrice: slPrice,
-            stopLossTrigger: slPrice,
+            size: size.toString(),
+            stopLossPrice: slPrice.toString(),
+            stopLossTrigger: slPrice.toString(),
           });
         }
       }
 
       if (response?.success) {
-        setOrderStatus({ type: "success", message: response.message || "Order placed!" });
+        console.log('[PlaceOrder] Order response:', response);
+        
+        // Check if order was filled immediately or is resting
+        const orderData = response.data;
+        const filled = orderData?.status?.filled;
+        const resting = orderData?.restingOrders;
+        
+        let statusMsg = response.message || "Order placed!";
+        if (filled?.totalSz) {
+          statusMsg = `Filled ${filled.totalSz} @ ${filled.avgPx}`;
+        } else if (resting?.length > 0) {
+          statusMsg = `Order placed: ${resting[0].oid}`;
+        }
+        
+        setOrderStatus({ type: "success", message: statusMsg });
         setSize("");
         setTpPrice("");
         setSlPrice("");
-        refetchAccount();
-        setTimeout(() => setOrderStatus(null), 3000);
+        
+        // Refetch account to update positions in real-time
+        setTimeout(() => {
+          refetchAccount();
+        }, 500);
+        
+        setTimeout(() => setOrderStatus(null), 5000);
       }
     } catch (err: any) {
       console.error("[PlaceOrder] Order failed:", err);
@@ -420,13 +452,13 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
         <div className="space-y-2">
           <div className="flex justify-between text-[10px] text-gray-500 uppercase font-mono">
             <span>Leverage</span>
-            <span className="text-gray-600">Max: {maxLeverage}x</span>
+            <span className="text-gray-600">Max: {maxLeverage}x (Isolated)</span>
           </div>
           <button
             onClick={() => setShowLeverageModal(true)}
             className="w-full flex items-center justify-between px-4 py-3 bg-black border border-white/10 rounded-lg hover:border-white/20 transition-colors"
           >
-            <span className="text-sm font-mono text-white">{currentLeverage}x</span>
+            <span className="text-sm font-mono text-white">{currentLeverage}x Isolated</span>
             <Settings2 className="w-4 h-4 text-gray-500" />
           </button>
         </div>
@@ -536,7 +568,7 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
       <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
         <div className="w-full max-w-sm bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
           <div className="flex items-center justify-between p-4 border-b border-white/10">
-            <h3 className="text-sm font-bold text-white">Adjust Leverage</h3>
+            <h3 className="text-sm font-bold text-white">Adjust Isolated Leverage</h3>
             <button 
               onClick={() => setShowLeverageModal(false)}
               className="p-1 hover:bg-white/10 rounded transition-colors"
@@ -570,14 +602,16 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
           <div className="p-4 border-t border-white/10 space-y-2">
             <button
               onClick={handleLeverageUpdate}
-              disabled={!canTrade}
-              className="w-full py-3 bg-cyan-500 text-black font-bold uppercase text-xs rounded-lg hover:bg-cyan-400 transition-colors disabled:opacity-50"
+              disabled={!canTrade || isUpdatingLeverage || tempLeverage === currentLeverage}
+              className="w-full py-3 bg-cyan-500 text-black font-bold uppercase text-xs rounded-lg hover:bg-cyan-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {canTrade ? "Confirm" : "Sign to Update"}
+              {isUpdatingLeverage && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isUpdatingLeverage ? "Updating..." : canTrade ? "Confirm" : "Sign to Update"}
             </button>
             <button
               onClick={() => setShowLeverageModal(false)}
-              className="w-full py-3 bg-transparent text-gray-500 font-bold uppercase text-xs rounded-lg hover:text-white transition-colors"
+              disabled={isUpdatingLeverage}
+              className="w-full py-3 bg-transparent text-gray-500 font-bold uppercase text-xs rounded-lg hover:text-white transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
