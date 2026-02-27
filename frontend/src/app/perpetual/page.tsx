@@ -9,6 +9,7 @@ import { MarketHeader } from "@/components/perpetual/MarketHeader";
 import { OrderBook } from "@/components/perpetual/OrderBook";
 import { TradeHistory } from "@/components/perpetual/TradeHistory";
 import { PlaceOrder } from "@/components/perpetual/PlaceOrder";
+import { TradingPanel } from "@/components/perpetual/TradingPanel";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 
@@ -21,7 +22,7 @@ export default function PerpetualPage() {
 
   // Percentages for splitters
   const [rightPanelWidth, setRightPanelWidth] = useState(25); // % width of right panel
-  const [bottomRowHeight, setBottomRowHeight] = useState(30); // % height of bottom row (History)
+  const [bottomRowHeight, setBottomRowHeight] = useState(40); // % height of bottom row (History)
   const [chartWidth, setChartWidth] = useState(70); // % width of chart vs orderbook
 
   const isDragging = useRef<"right" | "bottom" | "chart" | null>(null);
@@ -127,9 +128,9 @@ export default function PerpetualPage() {
               <div className="w-16 h-[2px] bg-white/20 rounded-full" />
             </div>
 
-            {/* Bottom Row (History) */}
+            {/* Bottom Row (Trading Panel with Positions, Orders, Fills, etc) */}
             <GlassPanel className="rounded-bl-2xl" style={{ height: `${bottomRowHeight}%` }}>
-              <TradeHistory symbol={selectedMarket} />
+              <TradingPanel symbol={selectedMarket} />
             </GlassPanel>
           </div>
 

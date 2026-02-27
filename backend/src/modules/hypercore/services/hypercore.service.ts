@@ -73,98 +73,88 @@ export class HypercoreService {
   }
 
   /**
-   * Detect actual price decimals from orderbook - THIS IS THE KEY!
-   * Read the actual prices from L2 book to see how many decimals Hyperliquid uses
+   * Detect tick size from orderbook by analyzing price differences
+   * Hyperliquid uses different tick sizes for different price ranges
    */
-  private async detectPriceDecimals(coin: string): Promise<number> {
+  private async detectTickSize(coin: string): Promise<number> {
     try {
       const orderbook = await this.infoClient.l2Book({ coin });
       if (!orderbook?.levels) {
-        this.logger.warn(`No orderbook data for ${coin}, defaulting to 2 decimals`);
-        return 2;
+        this.logger.warn(`No orderbook data for ${coin}, defaulting to 0.01 tick size`);
+        return 0.01;
       }
       
       const bids = orderbook.levels[0];
       const asks = orderbook.levels[1];
       
-      // Get sample price from orderbook
-      const samplePrice = bids?.[0]?.px || asks?.[0]?.px || '0';
-      
-      // Count decimals in the sample price
-      if (!samplePrice.includes('.')) {
-        return 0;
-      }
-      
-      const decimals = samplePrice.split('.')[1].length;
-      // this.logger.debug(`Detected ${decimals} price decimals for ${coin} from orderbook: ${samplePrice}`);
-      return decimals;
-    } catch (error) {
-      this.logger.warn(`Failed to detect price decimals for ${coin}, defaulting to 2`);
-      return 2;
-    }
-  }
-
-  /**
-   * Get tick size from orderbook by looking at price differences between levels
-   */
-  private async getTickSizeFromOrderbook(coin: string): Promise<number> {
-    try {
-      const orderbook = await this.infoClient.l2Book({ coin });
-      if (!orderbook?.levels) {
-        return 0.01; // default fallback
-      }
-      
-      const bids = orderbook.levels[0];
-      const asks = orderbook.levels[1];
-      
-      // Try to find tick size from bid spread
+      // Get prices from orderbook - work with strings to avoid floating point
+      const priceDiffs: string[] = [];
       if (bids && bids.length >= 2) {
-        const p1 = Number(bids[0].px);
-        const p2 = Number(bids[1].px);
-        const diff = Math.abs(p1 - p2);
-        if (diff > 0) return diff;
+        const diff = Math.abs(Number(bids[0].px) - Number(bids[1].px));
+        priceDiffs.push(diff.toString());
       }
-      
-      // Try ask spread
       if (asks && asks.length >= 2) {
-        const p1 = Number(asks[0].px);
-        const p2 = Number(asks[1].px);
-        const diff = Math.abs(p1 - p2);
-        if (diff > 0) return diff;
+        const diff = Math.abs(Number(asks[0].px) - Number(asks[1].px));
+        priceDiffs.push(diff.toString());
       }
       
-      // Fallback: derive from decimal places
-      const decimals = await this.detectPriceDecimals(coin);
-      return Math.pow(10, -decimals);
+      if (priceDiffs.length === 0) {
+        // Fallback: detect from decimal places
+        const samplePrice = bids?.[0]?.px || asks?.[0]?.px || '1.0';
+        const decimals = samplePrice.includes('.') ? samplePrice.split('.')[1].length : 2;
+        return Math.pow(10, -decimals);
+      }
+      
+      // Parse tick size from string to avoid floating point errors
+      // Take the smallest difference and round to clean decimal
+      const rawTickSize = Math.min(...priceDiffs.map(d => Number(d)).filter(p => p > 0));
+      
+      // Clean up floating point errors by rounding to significant figures
+      const tickSize = this.roundToSignificantFigures(rawTickSize, 2);
+      
+      return tickSize;
     } catch (error) {
-      this.logger.error(`Failed to get tick size for ${coin}:`, error);
+      this.logger.warn(`Failed to detect tick size for ${coin}, defaulting to 0.01`);
       return 0.01;
     }
   }
 
   /**
-   * Format price to match orderbook precision
+   * Round a number to N significant figures to clean up floating point errors
+   */
+  private roundToSignificantFigures(num: number, sigFigs: number): number {
+    if (num === 0) return 0;
+    const magnitude = Math.floor(Math.log10(Math.abs(num)));
+    const scale = Math.pow(10, sigFigs - 1 - magnitude);
+    return Math.round(num * scale) / scale;
+  }
+
+  /**
+   * Format price to match orderbook tick size (round to nearest valid tick)
+   * Uses integer arithmetic to avoid floating point precision errors
    */
   private async formatPrice(price: number, coin: string): Promise<string> {
-    const decimals = await this.detectPriceDecimals(coin);
-    return price.toFixed(decimals);
-  }
-
-  // ==================== MARKET DATA ====================
-
-  async getMarkets() {
-    const meta = await this.infoClient.meta();
-    return {
-      success: true,
-      markets: meta.universe,
-    };
-  }
-
-  async getPrice(coin: string) {
-    const mids = await this.infoClient.allMids();
-    const price = mids[coin];
-    if (!price) throw new BadRequestException(`Price not found for ${coin}`);
-    return { success: true, coin, price };
+    const tickSize = await this.detectTickSize(coin);
+    
+    // Determine decimal places from tick size
+    const tickDecimals = tickSize.toString().includes('.') 
+      ? tickSize.toString().split('.')[1].length 
+      : 0;
+    
+    // Convert to integer arithmetic to avoid floating point errors
+    const multiplier = Math.pow(10, tickDecimals);
+    const priceInt = Math.round(price * multiplier);
+    const tickInt = Math.round(tickSize * multiplier);
+    
+    // Round to nearest tick in integer space
+    const ticksCount = Math.round(priceInt / tickInt);
+    const roundedInt = ticksCount * tickInt;
+    
+    // Convert back to decimal
+    const rounded = roundedInt / multiplier;
+    const result = rounded.toFixed(tickDecimals);
+    
+    return result;
   }
 
   // ==================== ACCOUNT ====================
@@ -237,6 +227,8 @@ export class HypercoreService {
 
   async openLimitOrder(userId: string, order: OpenLimitOrderDto) {
     try {
+      this.logger.log(`Received limit order request: ${JSON.stringify(order)}`);
+      
       const exchange = await this.createExchangeClient(userId);
       const asset = await this.getAssetNumberByCoin(order.coin);
       const assetInfo = await this.getAssetMetadata(asset);
@@ -249,7 +241,8 @@ export class HypercoreService {
 
       const tif: 'Gtc' | 'Ioc' | 'Alo' = order.postOnly ? 'Alo' : 'Gtc';
       
-      // this.logger.log(`Limit order: ${order.isBuy ? 'BUY' : 'SELL'} ${formattedSize} ${order.coin} @ ${formattedPrice}`);
+      this.logger.log(`Limit order: ${order.isBuy ? 'BUY' : 'SELL'} ${formattedSize} ${order.coin} @ ${formattedPrice}, TIF: ${tif}`);
+      this.logger.debug(`Order payload: ${JSON.stringify({ a: asset, b: order.isBuy, p: formattedPrice, s: formattedSize, r: false, t: { limit: { tif } } })}`);
       
       const result = await exchange.order({
         orders: [{ a: asset, b: order.isBuy, p: formattedPrice, s: formattedSize, r: false, t: { limit: { tif } } }],
@@ -257,7 +250,12 @@ export class HypercoreService {
       });
 
       if (result?.status === 'ok') {
-        return { success: true, data: result.response?.data, message: 'Limit order placed' };
+        this.logger.debug(`Limit order placed successfully`);
+        return { 
+          success: true, 
+          data: result.response?.data, 
+          message: 'Limit order placed',
+        };
       }
       
       this.logger.error(`Order failed:`, result);
@@ -687,7 +685,7 @@ export class HypercoreService {
 
       const result = await exchange.updateLeverage({
         asset,
-        isCross: false,
+        isCross: dto.isCross ?? false,
         leverage: dto.leverage,
       });
 
@@ -728,39 +726,43 @@ export class HypercoreService {
     }
   }
 
-  // ==================== TWAP (Simplified) ====================
+  // ==================== TWAP (Native Hyperliquid) ====================
 
   async twap(userId: string, twap: TwapDto) {
     try {
       const exchange = await this.createExchangeClient(userId);
       const asset = await this.getAssetNumberByCoin(twap.coin);
-
-      const totalSlices = Math.floor(twap.durationSeconds / twap.frequencySeconds);
-      if (totalSlices < 1) throw new BadRequestException('Duration too short for frequency');
-
       const assetInfo = await this.getAssetMetadata(asset);
-      const sliceSize = Number(twap.size) / totalSlices;
-      const formattedSliceSize = this.roundToDecimals(sliceSize, assetInfo.szDecimals);
-
-      // this.logger.log(`TWAP plan: ${totalSlices} slices of ${formattedSliceSize} ${twap.coin}`);
-
-      return {
-        success: true,
-        message: 'TWAP plan created',
-        plan: {
-          coin: twap.coin,
-          isBuy: twap.isBuy,
-          totalSize: twap.size,
-          sliceSize: formattedSliceSize,
-          totalSlices,
-          frequencySeconds: twap.frequencySeconds,
-          durationSeconds: twap.durationSeconds,
+      
+      // Format size to szDecimals
+      const formattedSize = this.roundToDecimals(twap.size, assetInfo.szDecimals);
+      
+      // Use native Hyperliquid TWAP
+      const result = await exchange.twapOrder({
+        twap: {
+          a: asset,
+          b: twap.isBuy,
+          s: formattedSize,
+          r: false,
+          m: twap.durationMinutes,
+          t: twap.randomize ?? true,
         },
-        note: 'TWAP execution not implemented in this version. Use individual market orders.',
-      };
+      });
+
+      if (result?.status === 'ok') {
+        const twapId = result.response?.data?.status?.running?.twapId;
+        return {
+          success: true,
+          message: 'TWAP order placed',
+          twapId,
+          data: result.response?.data,
+        };
+      }
+      
+      throw new BadRequestException(`TWAP order failed: ${JSON.stringify(result)}`);
     } catch (error) {
       this.logger.error(`twap error:`, error);
-      throw new BadRequestException(`Failed to create TWAP: ${error.message}`);
+      throw new BadRequestException(`Failed to place TWAP: ${error.message}`);
     }
   }
 }

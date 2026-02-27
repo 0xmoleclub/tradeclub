@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsBoolean, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsNumber, IsOptional, IsString, Min, Max, ValidateNested } from 'class-validator';
 
 export enum TimeInForce {
   GTC = 'Gtc',
@@ -34,6 +34,10 @@ export class OpenLimitOrderDto {
   coin: string;
 
   @ApiProperty({ description: 'true = LONG (buy), false = SHORT (sell)', example: true })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
   @IsBoolean()
   isBuy: boolean;
 
@@ -46,6 +50,11 @@ export class OpenLimitOrderDto {
   size: string;
 
   @ApiPropertyOptional({ description: 'true = Add Liquidity Only (ALO)', example: false })
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
   @IsOptional()
   @IsBoolean()
   postOnly?: boolean;
@@ -57,6 +66,10 @@ export class OpenMarketOrderDto {
   coin: string;
 
   @ApiProperty({ description: 'true = LONG (buy), false = SHORT (sell)', example: true })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
   @IsBoolean()
   isBuy: boolean;
 
@@ -81,6 +94,11 @@ export class CloseLimitOrderDto {
   size: string;
 
   @ApiPropertyOptional({ description: 'true = Add Liquidity Only (ALO)', example: false })
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
   @IsOptional()
   @IsBoolean()
   postOnly?: boolean;
@@ -104,6 +122,10 @@ export class TakeProfitOrderDto {
   coin: string;
 
   @ApiProperty({ description: 'Current position direction: true = LONG, false = SHORT', example: true })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
   @IsBoolean()
   isBuy: boolean;
 
@@ -126,6 +148,10 @@ export class StopLossOrderDto {
   coin: string;
 
   @ApiProperty({ description: 'Current position direction: true = LONG, false = SHORT', example: true })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
   @IsBoolean()
   isBuy: boolean;
 
@@ -150,6 +176,10 @@ export class TwapDto {
   coin: string;
 
   @ApiProperty({ description: 'true = LONG (buy), false = SHORT (sell)', example: true })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
   @IsBoolean()
   isBuy: boolean;
 
@@ -157,15 +187,21 @@ export class TwapDto {
   @IsString()
   size: string;
 
-  @ApiProperty({ description: 'Seconds between each order', example: 30 })
+  @ApiProperty({ description: 'Duration in minutes (5-1440)', example: 10, minimum: 5, maximum: 1440 })
   @IsNumber()
-  @Min(1)
-  frequencySeconds: number;
+  @Min(5)
+  @Max(1440)
+  durationMinutes: number;
 
-  @ApiProperty({ description: 'Total duration in seconds', example: 300 })
-  @IsNumber()
-  @Min(1)
-  durationSeconds: number;
+  @ApiPropertyOptional({ description: 'Enable random order timing', default: true })
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return true;
+    if (typeof value === 'string') return value === 'true';
+    return Boolean(value);
+  })
+  @IsOptional()
+  @IsBoolean()
+  randomize?: boolean;
 }
 
 // ==================== CLOSE ALL POSITIONS ====================
