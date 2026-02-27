@@ -274,13 +274,13 @@ export const CandleChart = ({ symbol = "BTC-PERP" }: CandleChartProps) => {
       {/* Reset view button - shows when user has scrolled */}
       <button
         onClick={handleResetView}
-        className="absolute top-4 right-4 z-10 px-3 py-1.5 bg-black/80 hover:bg-white/10 rounded-lg border border-white/10 text-[10px] font-mono text-gray-400 hover:text-white transition-colors"
+        className="absolute top-4 right-16 z-10 px-3 py-1.5 bg-black/80 hover:bg-white/10 rounded-lg border border-white/10 text-[10px] font-mono text-gray-400 hover:text-white transition-colors"
       >
         Reset View
       </button>
 
       {/* Interval Buttons - Bottom Right */}
-      <div className="absolute bottom-12 right-4 z-10 flex gap-0.5 bg-black/80 p-1 rounded-lg border border-white/20 backdrop-blur-sm">
+      <div className="absolute bottom-12 right-16 z-10 flex gap-0.5 bg-black/80 p-1 rounded-lg border border-white/20 backdrop-blur-sm">
         {INTERVALS.map((tf) => (
           <button
             key={tf.value}

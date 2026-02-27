@@ -547,62 +547,134 @@ const PositionsTab = ({ coin }: { coin: string }) => {
           </div>
         )}
 
-        {filteredPositions.map((pos) => {
-          const size = parseFloat(pos.szi);
-          const entryPx = parseFloat(pos.entryPx);
-          const positionValue = parseFloat(pos.positionValue);
-          const unrealizedPnl = parseFloat(pos.unrealizedPnl);
-          const leverage = parseFloat(pos.leverage);
-          const liquidationPx = parseFloat(pos.liquidationPx);
-          const isLong = size > 0;
-          const absSize = Math.abs(size);
-          const pnlPercent = entryPx > 0 ? (unrealizedPnl / (absSize * entryPx)) * 100 : 0;
+        {/* Terminal-Style Positions Table */}
+        <div className="border border-white/10 rounded-lg overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-[110px_100px_95px_95px_95px_75px_90px_95px_115px_70px] gap-3 px-4 py-2 bg-white/5 border-b border-white/10 text-[10px] text-gray-500 uppercase font-medium">
+            <div>Asset</div>
+            <div className="text-right">Size</div>
+            <div className="text-right">Entry</div>
+            <div className="text-right">Mark</div>
+            <div className="text-right">Liq</div>
+            <div className="text-right">Distance</div>
+            <div className="text-right">Margin</div>
+            <div className="text-right">Value</div>
+            <div className="text-right">PnL</div>
+            <div className="text-right">Action</div>
+          </div>
 
-          return (
-            <div key={pos.coin} className="p-3 bg-white/5 rounded-lg border border-white/10 hover:border-white/20 transition-colors">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white">{pos.coin}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded ${isLong ? "bg-cyan-500/20 text-cyan-400" : "bg-magenta-500/20 text-magenta-400"}`}>
-                    {isLong ? "LONG" : "SHORT"} {leverage.toFixed(0)}x Isolated
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className={`text-sm font-mono font-bold ${unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {unrealizedPnl >= 0 ? "+" : ""}{formatValue(unrealizedPnl)}
-                    <span className="text-[10px] ml-1 opacity-70">({formatPercent(pnlPercent)})</span>
+          {/* Position Rows */}
+          {filteredPositions.map((pos) => {
+            const size = parseFloat(pos.szi);
+            const entryPx = parseFloat(pos.entryPx);
+            const positionValue = parseFloat(pos.positionValue);
+            const unrealizedPnl = parseFloat(pos.unrealizedPnl);
+            const leverage = parseFloat(pos.leverage);
+            const liquidationPx = parseFloat(pos.liquidationPx);
+            const marginUsed = parseFloat(pos.marginUsed);
+            const isLong = size > 0;
+            const absSize = Math.abs(size);
+            const pnlPercent = entryPx > 0 ? (unrealizedPnl / (absSize * entryPx)) * 100 : 0;
+            
+            // Calculate mark price
+            const markPx = isLong 
+              ? entryPx + (unrealizedPnl / absSize)
+              : entryPx - (unrealizedPnl / absSize);
+            
+            // Calculate distance to liquidation
+            const distanceToLiq = liquidationPx > 0
+              ? isLong
+                ? ((liquidationPx - markPx) / markPx) * 100
+                : ((markPx - liquidationPx) / markPx) * 100
+              : 0;
+            
+            // Risk color
+            const getLiqColor = () => {
+              if (liquidationPx === 0) return 'text-gray-600';
+              if (Math.abs(distanceToLiq) > 10) return 'text-gray-400';
+              if (Math.abs(distanceToLiq) > 5) return 'text-yellow-400';
+              return 'text-red-400';
+            };
+
+            return (
+              <div key={pos.coin} className="border-b border-white/5 last:border-b-0">
+                {/* Position Row */}
+                <div className="grid grid-cols-[110px_100px_95px_95px_95px_75px_90px_95px_115px_70px] gap-3 px-4 py-3 hover:bg-white/5 transition-colors items-center h-17">
+                  {/* Asset Column */}
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-semibold text-white leading-tight">{pos.coin}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold w-fit leading-tight ${
+                      isLong ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"
+                    }`}>
+                      {isLong ? "LONG" : "SHORT"}
+                    </span>
+                    <span className="text-[10px] text-gray-500 leading-tight">{leverage.toFixed(0)}x Isolated</span>
                   </div>
-                  <button
-                    onClick={() => handleCloseClick(pos)}
-                    className="px-3 py-1 bg-orange-600/20 text-orange-400 border border-orange-600/30 rounded text-[10px] font-bold uppercase hover:bg-orange-600/30 transition-colors"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Size</span>
-                  <span className="font-mono text-white">{formatSize(absSize)} {pos.coin}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Position Value</span>
-                  <span className="font-mono text-white">{formatValue(positionValue)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Entry Price</span>
-                  <span className="font-mono text-white">{formatPrice(entryPx)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Liquidation</span>
-                  <span className={`font-mono ${liquidationPx > 0 ? "text-red-400" : "text-gray-600"}`}>
+
+                  {/* Size */}
+                  <div className="text-[13px] font-mono text-white text-right tabular-nums">
+                    <div>{formatSize(absSize)}</div>
+                    <div className="text-[10px] text-gray-500">{pos.coin}</div>
+                  </div>
+
+                  {/* Entry */}
+                  <div className="text-[13px] font-mono text-white text-right tabular-nums">
+                    {formatPrice(entryPx)}
+                  </div>
+
+                  {/* Mark */}
+                  <div className="text-[13px] font-mono text-white text-right tabular-nums">
+                    {formatPrice(markPx)}
+                  </div>
+
+                  {/* Liquidation */}
+                  <div className={`text-[13px] font-mono text-right tabular-nums ${getLiqColor()}`}>
                     {liquidationPx > 0 ? formatPrice(liquidationPx) : "-"}
-                  </span>
+                  </div>
+
+                  {/* Distance */}
+                  <div className={`text-[12px] font-mono text-right tabular-nums ${getLiqColor()}`}>
+                    {liquidationPx > 0 ? `(${Math.abs(distanceToLiq).toFixed(1)}%)` : "-"}
+                  </div>
+
+                  {/* Margin */}
+                  <div className="text-[13px] font-mono text-white text-right tabular-nums">
+                    {formatValue(marginUsed)}
+                  </div>
+
+                  {/* Value */}
+                  <div className="text-[13px] font-mono text-white text-right tabular-nums">
+                    {formatValue(positionValue)}
+                  </div>
+
+                  {/* PnL */}
+                  <div className="text-right">
+                    <div className={`text-[15px] font-bold font-mono leading-tight tabular-nums ${
+                      unrealizedPnl >= 0 ? "text-green-400" : "text-red-400"
+                    }`}>
+                      {unrealizedPnl >= 0 ? "+" : ""}{formatValue(unrealizedPnl)}
+                    </div>
+                    <div className={`text-[11px] font-mono leading-tight tabular-nums ${
+                      unrealizedPnl >= 0 ? "text-green-400/70" : "text-red-400/70"
+                    }`}>
+                      ({pnlPercent >= 0 ? "+" : ""}{formatPercent(pnlPercent)})
+                    </div>
+                  </div>
+
+                  {/* Action */}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() => handleCloseClick(pos)}
+                      className="px-2.5 py-1 border border-orange-600/40 text-orange-400 rounded text-[10px] font-medium hover:bg-orange-600/10 transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
       {/* Close Position Modal */}
@@ -1284,14 +1356,18 @@ export const TradingPanel = ({ symbol = "BTC-PERP" }: TradingPanelProps) => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-3 text-[11px] font-bold uppercase whitespace-nowrap transition-colors ${
+            className={`flex items-center gap-2 px-6 py-3 text-[11px] whitespace-nowrap transition-all relative ${
               activeTab === tab.id
-                ? "text-cyan-400 border-b-2 border-cyan-400 bg-white/5"
-                : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                ? "text-cyan-400 font-bold"
+                : "text-gray-500 font-medium hover:text-gray-300"
             }`}
           >
             {tab.icon}
             {tab.label}
+            {/* Active indicator */}
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyan-400" />
+            )}
           </button>
         ))}
       </div>
