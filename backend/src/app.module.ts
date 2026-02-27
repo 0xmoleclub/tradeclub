@@ -27,6 +27,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
 // Engines modules
 import { BattleModule } from './modules/battle/battle.module';
+import { TestBattleModule } from './modules/battle/test/test-battle.module';
 import { getRedisConnection } from './shared/utils/redis';
 
 // DEPRECATED: Solana/Drift modules - commented out for EVM/Hypercore migration
@@ -73,6 +74,7 @@ import { getRedisConnection } from './shared/utils/redis';
     // Engines modules
     // Battle / Match modules
     BattleModule,
+    ...(process.env.NODE_ENV !== 'production' ? [TestBattleModule] : []),
 
     // Feature modules
     AuthModule,
