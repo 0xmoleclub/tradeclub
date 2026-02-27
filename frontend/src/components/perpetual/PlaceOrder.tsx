@@ -23,7 +23,7 @@ interface PlaceOrderProps {
   symbol?: string;
 }
 
-type OrderType = "limit" | "market";
+type OrderType = "limit" | "market" | "twap";
 type OrderSide = "long" | "short";
 
 interface OrderStatus {
@@ -61,6 +61,10 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
   const [price, setPrice] = useState<string>("");
   const [size, setSize] = useState<string>("");
   const [markPrice, setMarkPrice] = useState<number>(0);
+  
+  // TWAP specific
+  const [twapDuration, setTwapDuration] = useState<number>(10); // minutes
+  const [twapRandomize, setTwapRandomize] = useState<boolean>(true);
   
   // TP/SL
   const [tpPrice, setTpPrice] = useState<string>("");
@@ -205,6 +209,14 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
       return;
     }
 
+    // TWAP validation
+    if (orderType === "twap") {
+      if (twapDuration < 5 || twapDuration > 1440) {
+        setOrderStatus({ type: "error", message: "TWAP duration must be 5-1440 minutes" });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setOrderStatus({ type: "loading", message: "Placing order..." });
 
@@ -212,12 +224,20 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
       let response;
       const isBuy = side === "long";
 
-      // Open position only
+      // Handle different order types
       if (orderType === "market") {
         response = await tradingApi.openMarketOrder({ 
           coin, 
           isBuy, 
           size: size.toString() 
+        });
+      } else if (orderType === "twap") {
+        response = await tradingApi.placeTwapOrder({
+          coin,
+          isBuy,
+          size: size.toString(),
+          durationMinutes: twapDuration,
+          randomize: twapRandomize,
         });
       } else {
         response = await tradingApi.openLimitOrder({ 
@@ -261,9 +281,12 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
         const orderData = response.data;
         const filled = orderData?.status?.filled;
         const resting = orderData?.restingOrders;
+        const twapId = response.twapId;
         
         let statusMsg = response.message || "Order placed!";
-        if (filled?.totalSz) {
+        if (twapId) {
+          statusMsg = `TWAP order started: #${twapId}`;
+        } else if (filled?.totalSz) {
           statusMsg = `Filled ${filled.totalSz} @ ${filled.avgPx}`;
         } else if (resting?.length > 0) {
           statusMsg = `Order placed: ${resting[0].oid}`;
@@ -362,7 +385,7 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
         <div className="flex-1 overflow-auto p-4 space-y-4">
           {/* Order Type Toggle */}
           <div className="flex p-1 bg-black/50 rounded-lg border border-white/10">
-            {(["limit", "market"] as OrderType[]).map((type) => (
+            {(["limit", "market", "twap"] as OrderType[]).map((type) => (
               <button
                 key={type}
                 onClick={() => setOrderType(type)}
@@ -376,6 +399,15 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
               </button>
             ))}
           </div>
+
+          {/* TWAP Info Banner */}
+          {orderType === "twap" && (
+            <div className="px-3 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+              <p className="text-[10px] text-cyan-400 font-medium">
+                TWAP (Time-Weighted Average Price) splits your order into smaller slices executed over time to minimize market impact.
+              </p>
+            </div>
+          )}
 
         {/* Side Selector */}
         <div className="grid grid-cols-2 gap-2">
@@ -426,6 +458,61 @@ export const PlaceOrder = ({ symbol = "BTC-PERP" }: PlaceOrderProps) => {
               <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600">USD</span>
             </div>
           </div>
+        )}
+
+        {/* TWAP Duration (TWAP only) */}
+        {orderType === "twap" && (
+          <>
+            <div className="space-y-2">
+              <div className="flex justify-between text-[10px] text-gray-500 uppercase font-mono">
+                <span>Duration (minutes)</span>
+                <span className="text-gray-600">5-1440 min</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={twapDuration}
+                  onChange={(e) => setTwapDuration(Math.max(5, Math.min(1440, parseInt(e.target.value) || 5)))}
+                  min="5"
+                  max="1440"
+                  placeholder="10"
+                  className="w-full bg-black border border-white/10 rounded-lg px-4 py-3 text-sm font-mono text-white focus:border-cyan-500 focus:outline-none transition-colors"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600">min</span>
+              </div>
+              <div className="flex gap-2 text-[10px]">
+                {[5, 10, 30, 60, 120].map((min) => (
+                  <button
+                    key={min}
+                    onClick={() => setTwapDuration(min)}
+                    className={`px-2 py-1 rounded border transition-colors ${
+                      twapDuration === min
+                        ? "border-cyan-500 text-cyan-400 bg-cyan-500/10"
+                        : "border-white/10 text-gray-500 hover:text-white hover:border-white/20"
+                    }`}
+                  >
+                    {min}m
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+              <span className="text-xs text-gray-400">Randomize order timing</span>
+              <button
+                onClick={() => setTwapRandomize(!twapRandomize)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${
+                  twapRandomize ? "bg-cyan-500" : "bg-gray-600"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                    twapRandomize ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+          </>
         )}
 
         {/* Size Input */}

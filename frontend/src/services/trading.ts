@@ -150,10 +150,19 @@ export interface TpSlOrderRequest {
   stopLossTrigger?: string;
 }
 
+export interface TwapOrderRequest {
+  coin: string;
+  isBuy: boolean;
+  size: string;
+  durationMinutes: number;  // 5-1440 minutes
+  randomize?: boolean;  // Default true
+}
+
 export interface OrderResponse {
   success: boolean;
   message: string;
   data?: any;
+  twapId?: number;  // For TWAP orders
 }
 
 export const tradingApi = {
@@ -227,6 +236,14 @@ export const tradingApi = {
   cancelAllOrders: async (): Promise<OrderResponse> => {
     return fetchWithAuth('/hypercore/orders/cancel-all', {
       method: 'POST',
+    });
+  },
+
+  // TWAP orders
+  placeTwapOrder: async (order: TwapOrderRequest): Promise<OrderResponse> => {
+    return fetchWithAuth('/hypercore/orders/twap', {
+      method: 'POST',
+      body: JSON.stringify(order),
     });
   },
 

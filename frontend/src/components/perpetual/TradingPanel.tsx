@@ -503,40 +503,19 @@ const OpenOrdersTab = ({ coin }: { coin: string }) => {
 // ==================== TWAP TAB ====================
 const TwapTab = ({ coin }: { coin: string }) => {
   const { isConnected } = useAccount();
-  const { twapFills, isLoading: twapLoading } = useHyperliquidTwap();
-  const { openOrders, isLoading: ordersLoading } = useHyperliquidOrders();
+  const { twapFills, activeTwaps, historicalTwaps, isLoading: twapLoading } = useHyperliquidTwap();
   const [mounted, setMounted] = useState(false);
-  const [twapSubTab, setTwapSubTab] = useState<"active" | "fills">("fills");
+  const [twapSubTab, setTwapSubTab] = useState<"active" | "history" | "fills">("active");
   
   // All hooks must be called before any conditional returns
   useEffect(() => setMounted(true), []);
 
-  // Filter for TWAP orders from open orders
-  // TWAP orders might have a specific field to identify them - we'll check all possible indicators
-  const activeTwaps = (openOrders || []).filter(order => 
-    order.orderType?.toLowerCase().includes('twap') || 
-    (order as any).isTwap === true ||
-    (order as any).twapId !== undefined
-  );
-
-  // Debug: Log sample active orders when they exist
-  useEffect(() => {
-    if ((openOrders || []).length > 0 && activeTwaps.length === 0) {
-      console.log('[TwapTab] Sample active orders (checking for TWAP):', 
-        (openOrders || []).slice(0, 3).map(o => ({
-          orderType: o.orderType,
-          tif: o.tif,
-          coin: o.coin,
-          allKeys: Object.keys(o)
-        }))
-      );
-    }
-  }, [openOrders, activeTwaps]);
-
   // Show all TWAP fills regardless of current coin
   const filteredTwapFills = twapFills || [];
+  const activeOrders = activeTwaps || [];
+  const historicalOrders = historicalTwaps || [];
 
-  const isLoading = twapLoading || ordersLoading;
+  const isLoading = twapLoading;
 
   // Now conditional returns are safe
   if (!mounted) {
@@ -552,7 +531,7 @@ const TwapTab = ({ coin }: { coin: string }) => {
     return <ConnectWalletPrompt message="Connect your wallet to view TWAP orders" />;
   }
 
-  if (isLoading && (twapFills || []).length === 0 && (openOrders || []).length === 0) {
+  if (isLoading && (twapFills || []).length === 0 && (activeTwaps || []).length === 0 && (historicalTwaps || []).length === 0) {
     return (
       <div className="h-48 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
@@ -572,7 +551,17 @@ const TwapTab = ({ coin }: { coin: string }) => {
               : "text-gray-500 hover:text-gray-300"
           }`}
         >
-          Active
+          Active {activeOrders.length > 0 && `(${activeOrders.length})`}
+        </button>
+        <button
+          onClick={() => setTwapSubTab("history")}
+          className={`px-4 py-2 text-[11px] font-bold uppercase tracking-wider transition-all ${
+            twapSubTab === "history"
+              ? "text-cyan-400 border-b-2 border-cyan-400"
+              : "text-gray-500 hover:text-gray-300"
+          }`}
+        >
+          History {historicalOrders.length > 0 && `(${historicalOrders.length})`}
         </button>
         <button
           onClick={() => setTwapSubTab("fills")}
@@ -595,39 +584,112 @@ const TwapTab = ({ coin }: { coin: string }) => {
                 Active TWAP orders that are currently being executed over time.
               </p>
             </div>
-            {activeTwaps.length === 0 ? (
+            {activeOrders.length === 0 ? (
               <EmptyState icon={Zap} title="No active TWAP orders" subtitle="Your active TWAP orders will appear here" />
             ) : (
               <table className="w-full text-[11px]">
                 <thead className="text-gray-500 border-b border-white/10 sticky top-0 bg-black">
                   <tr>
+                    <th className="text-left py-2 px-2">TWAP ID</th>
                     <th className="text-left py-2 px-2">Coin</th>
                     <th className="text-left py-2 px-2">Side</th>
-                    <th className="text-right py-2 px-2">Size</th>
-                    <th className="text-right py-2 px-2">Limit Price</th>
-                    <th className="text-right py-2 px-2">Filled</th>
+                    <th className="text-right py-2 px-2">Total Size</th>
+                    <th className="text-right py-2 px-2">Executed</th>
+                    <th className="text-right py-2 px-2">Duration</th>
                     <th className="text-left py-2 px-2">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {activeTwaps.map((order, idx) => (
-                    <tr key={`${order.oid}-${idx}`} className="border-b border-white/5 hover:bg-white/5">
-                      <td className="py-2 px-2 font-medium text-white">{order.coin}</td>
-                      <td className="py-2 px-2">
-                        <span className={order.side === "B" ? "text-cyan-400" : "text-magenta-400"}>
-                          {order.side === "B" ? "Buy" : "Sell"}
-                        </span>
-                      </td>
-                      <td className="py-2 px-2 text-right font-mono text-white">{formatSize(order.sz)}</td>
-                      <td className="py-2 px-2 text-right font-mono text-white">{formatPrice(order.limitPx)}</td>
-                      <td className="py-2 px-2 text-right font-mono text-gray-400">
-                        {formatSize((parseFloat(order.origSz || order.sz) - parseFloat(order.sz)).toString())} / {formatSize(order.origSz || order.sz)}
-                      </td>
-                      <td className="py-2 px-2">
-                        <span className="text-cyan-400 text-xs">Running</span>
-                      </td>
-                    </tr>
-                  ))}
+                  {activeOrders.map((twap, idx) => {
+                    const executedSz = parseFloat(twap.state.executedSz || '0');
+                    const totalSz = parseFloat(twap.state.sz);
+                    const percentFilled = totalSz > 0 ? ((executedSz / totalSz) * 100).toFixed(1) : '0';
+                    
+                    return (
+                      <tr key={`${twap.twapId}-${idx}`} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="py-2 px-2 font-medium text-cyan-400">#{twap.twapId}</td>
+                        <td className="py-2 px-2 font-medium text-white">{twap.state.coin}</td>
+                        <td className="py-2 px-2">
+                          <span className={twap.state.side === "B" ? "text-cyan-400" : "text-magenta-400"}>
+                            {twap.state.side === "B" ? "Buy" : "Sell"}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-right font-mono text-white">{formatSize(twap.state.sz)}</td>
+                        <td className="py-2 px-2 text-right font-mono text-gray-400">
+                          {formatSize(twap.state.executedSz)} ({percentFilled}%)
+                        </td>
+                        <td className="py-2 px-2 text-right font-mono text-gray-400">
+                          {twap.state.minutes}m
+                        </td>
+                        <td className="py-2 px-2">
+                          <span className="text-cyan-400 text-xs">Running</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+
+        {twapSubTab === "history" && (
+          <>
+            <div className="px-4 py-2 bg-cyan-500/10 border-b border-cyan-500/20 mb-2">
+              <p className="text-[10px] text-cyan-400 font-medium">
+                Completed, terminated, or failed TWAP orders.
+              </p>
+            </div>
+            {historicalOrders.length === 0 ? (
+              <EmptyState icon={Zap} title="No TWAP history" subtitle="Your completed TWAP orders will appear here" />
+            ) : (
+              <table className="w-full text-[11px]">
+                <thead className="text-gray-500 border-b border-white/10 sticky top-0 bg-black">
+                  <tr>
+                    <th className="text-left py-2 px-2">TWAP ID</th>
+                    <th className="text-left py-2 px-2">Coin</th>
+                    <th className="text-left py-2 px-2">Side</th>
+                    <th className="text-right py-2 px-2">Total Size</th>
+                    <th className="text-right py-2 px-2">Executed</th>
+                    <th className="text-right py-2 px-2">Duration</th>
+                    <th className="text-left py-2 px-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historicalOrders.map((twap, idx) => {
+                    const executedSz = parseFloat(twap.state.executedSz || '0');
+                    const totalSz = parseFloat(twap.state.sz);
+                    const percentFilled = totalSz > 0 ? ((executedSz / totalSz) * 100).toFixed(1) : '0';
+                    const status = twap.status.status;
+                    
+                    return (
+                      <tr key={`${twap.twapId}-${idx}`} className="border-b border-white/5 hover:bg-white/5">
+                        <td className="py-2 px-2 font-medium text-gray-400">#{twap.twapId}</td>
+                        <td className="py-2 px-2 font-medium text-white">{twap.state.coin}</td>
+                        <td className="py-2 px-2">
+                          <span className={twap.state.side === "B" ? "text-cyan-400" : "text-magenta-400"}>
+                            {twap.state.side === "B" ? "Buy" : "Sell"}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-right font-mono text-white">{formatSize(twap.state.sz)}</td>
+                        <td className="py-2 px-2 text-right font-mono text-gray-400">
+                          {formatSize(twap.state.executedSz)} ({percentFilled}%)
+                        </td>
+                        <td className="py-2 px-2 text-right font-mono text-gray-400">
+                          {twap.state.minutes}m
+                        </td>
+                        <td className="py-2 px-2">
+                          <span className={`text-xs ${
+                            status === 'finished' ? 'text-green-400' :
+                            status === 'terminated' ? 'text-yellow-400' :
+                            status === 'error' ? 'text-red-400' : 'text-gray-400'
+                          }`}>
+                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
