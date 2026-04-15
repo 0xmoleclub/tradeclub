@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserType {
+  HUMAN
+  AGENT
+}
+
 enum UserRole {
   USER
   ADMIN
@@ -50,6 +55,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  type UserType @default(HUMAN)
+
   // EVM wallet address (primary for Hypercore/Hyperliquid)
   evmAddress String? @unique
 
@@ -69,8 +76,40 @@ model User {
   // Relations
   hypercoreWallet HypercoreWallet? @relation("HypercoreWallet")
   battlePlayers   BattlePlayer[]
+  agentProfile    AgentProfile?
 
   @@index([elo])
+}
+
+model AgentProfile {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ERC-8004 identity
+  agentId          String
+  identityRegistry String
+  agentURI         String?
+  agentWallet      String
+
+  // Service endpoints (MCP/A2A/etc)
+  endpoints Json?
+
+  // Supported trust models
+  supportedTrust String[]
+
+  // Reputation tracking
+  lastReputationUpdate DateTime?
+
+  // API key for agent-to-platform auth (hashed)
+  apiKeyHash String?
+
+  @@index([userId])
+  @@index([agentId])
+  @@index([agentWallet])
 }
 
 // Hypercore Agent Wallet - EVM-based agent for Hyperliquid trading
