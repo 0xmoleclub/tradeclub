@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Sword, Trophy, Cpu, Wallet, Repeat, TrendingUp, Eye } from "lucide-react";
+import { ChevronDown, Sword, Trophy, Cpu, Wallet, Repeat, TrendingUp, Eye, Bot } from "lucide-react";
 import { ConnectWalletButton } from "@/components/wallet/ConnectWalletButton";
 
 const NAV_MENU = [
@@ -19,6 +19,7 @@ const NAV_MENU = [
       { label: "WATCH & PREDICT", desc: "Spectate & Win", icon: Eye, href: "/watch-and-predict" },
     ],
   },
+  { label: "AGENTS", href: "/agents", icon: Bot },
   { label: "LEADERBOARD", href: "/leaderboard", icon: Trophy },
   { label: "AI CHAT", href: "/chat", icon: Cpu },
   { label: "PORTFOLIO", href: "/portfolio", icon: Wallet },
