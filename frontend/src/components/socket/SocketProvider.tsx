@@ -13,14 +13,12 @@ export const SocketProvider = ({
     const [connected, setConnected] = useState(false);
 
     useEffect(() => {
-        const socket = getSocket();
+        const socket = getSocket(userId);
 
         socket.connect();
 
         socket.on("connect", () => {
             setConnected(true);
-
-            // Authenticate the socket connection with the user ID
             socket.emit("auth", { userId });
         });
 
@@ -28,7 +26,6 @@ export const SocketProvider = ({
             setConnected(false);
         });
 
-        // cleanup
         return () => {
             socket.off("connect");
             socket.off("disconnect");
@@ -41,5 +38,3 @@ export const SocketProvider = ({
         </SocketContext.Provider>
     );
 };
-
-// lol

@@ -7,8 +7,8 @@ export { useHyperliquidFills, useHyperliquidFillsByCoin, type UserFill } from '.
 export { useHyperliquidTwap, type TwapSliceFill } from './useHyperliquidTwap';
 export { useHyperliquidFunding, useHyperliquidFundingByCoin, type FundingPayment } from './useHyperliquidFunding';
 export { useHyperliquidOrderHistory, useHyperliquidOrderHistoryByCoin, type HistoricalOrder } from './useHyperliquidOrderHistory';
-export type { TwapOrder } from './useHyperliquidTwap'; // backward compat
-export { useMatching } from './useMatching';
+export type { TwapOrder } from './useHyperliquidTwap';
+// export { useMatching } from './useMatching';
 export { useMouseParallax } from './useMouseParallax';
 export { useAuth, useRequireTrade, useRequireWallet, AuthProvider } from './useAuth';
 export { useAgentWallet } from './useAgentWallet';
