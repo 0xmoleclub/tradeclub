@@ -3,7 +3,7 @@ import { PrismaService } from '@/database/prisma.service';
 import { BattlePlayerStatus, MetricType, UserStatus } from '@prisma/client';
 import { BattleService } from '../services/battle.service';
 import { BattleLifecycleService } from '../services/battle-lifecylce.service';
-import { MatchGroup } from '../../matchmaking/types/matchmaking.types';
+import { MatchGroup } from '../types/matchmaking.types';
 import { CreateBattleResultDto } from '../dto';
 import { randomUUID } from 'crypto';
 
@@ -17,10 +17,6 @@ export class TestBattleService {
     private readonly lifecycleService: BattleLifecycleService,
   ) {}
 
-  /**
-   * Seeds N mock users (upsert by evmAddress) and creates a battle via the
-   * normal BattleService.create() path, which enqueues the on-chain market.
-   */
   async createTestBattle(
     playerCount = 2,
     matchId?: string,
@@ -32,7 +28,6 @@ export class TestBattleService {
     const resolvedMatchId = matchId ?? randomUUID();
     const playerCount_ = Math.max(2, Math.min(4, playerCount));
 
-    // Upsert stable test users (deterministic by slot index)
     const users = await Promise.all(
       Array.from({ length: playerCount_ }, async (_, i: number) => {
         const evmAddress = `0x${'test000000000000000000000000000000000000'.slice(0, -i.toString().length)}${i + 1}`;
@@ -45,7 +40,7 @@ export class TestBattleService {
             elo: 1000,
           },
           update: {
-            status: UserStatus.ACTIVE, // reset in case a previous test left them IN_BATTLE
+            status: UserStatus.ACTIVE,
           },
         });
       }),
@@ -59,6 +54,7 @@ export class TestBattleService {
       players: users.map((u: { id: string; elo: number }) => ({
         userId: u.id,
         elo: u.elo,
+        stake: 100,
         joinedAt: Date.now(),
       })),
     };
@@ -81,10 +77,6 @@ export class TestBattleService {
     };
   }
 
-  /**
-   * Marks all JOINED players as READY and drives the lifecycle evaluation so
-   * the battle transitions MATCHING → RUNNING.
-   */
   async startTestBattle(battleId: string) {
     const battle = await this.prisma.battle.findUnique({
       where: { id: battleId },
@@ -92,23 +84,18 @@ export class TestBattleService {
     });
     if (!battle) throw new NotFoundException(`Battle ${battleId} not found`);
 
-    // Mark every JOINED player as READY
     await this.prisma.battlePlayer.updateMany({
       where: { battleId, status: BattlePlayerStatus.JOINED },
       data: { status: BattlePlayerStatus.READY },
     });
 
-    const result = await this.lifecycleService.evaluate(battleId);
+    const result = await this.battleService.battleStart(battleId);
     this.logger.log(
       `[TEST] Start evaluation for battle ${battleId}: ${JSON.stringify(result)}`,
     );
     return result;
   }
 
-  /**
-   * Marks all PLAYING players as FINISHED and drives the lifecycle evaluation
-   * so the battle transitions RUNNING → FINISHED and proposes on-chain outcome.
-   */
   async finishTestBattle(battleId: string, winnerOutcome = 0) {
     const battle = await this.prisma.battle.findUnique({
       where: { id: battleId },
@@ -116,18 +103,15 @@ export class TestBattleService {
     });
     if (!battle) throw new NotFoundException(`Battle ${battleId} not found`);
 
-    // Get the battle's prediction question
     const question = await this.prisma.battlePredictionQuestion.findFirst({
       where: { battleId },
     });
 
-    // Mark all PLAYING players as FINISHED
     await this.prisma.battlePlayer.updateMany({
       where: { battleId, status: BattlePlayerStatus.PLAYING },
       data: { status: BattlePlayerStatus.FINISHED },
     });
 
-    // Build a mock result DTO
     const dto: CreateBattleResultDto = {
       description: '[TEST] Mock battle result',
       dataHash: `test:${battleId}:${Date.now()}`,
@@ -138,7 +122,6 @@ export class TestBattleService {
       metrics: battle.players.map((p: { slot: number }, i: number) => ({
         metric: MetricType.PNL,
         playerSlot: p.slot,
-        // Winning slot has highest PnL; others decrease by rank
         value: (battle.players.length - i) * 100,
       })),
     };
@@ -150,7 +133,6 @@ export class TestBattleService {
     return result;
   }
 
-  /** Convenience: fetch full battle state including players. */
   async getBattleState(battleId: string) {
     const battle = await this.prisma.battle.findUnique({
       where: { id: battleId },

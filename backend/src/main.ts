@@ -38,7 +38,9 @@ async function bootstrap() {
   });
 
   // Global prefix and versioning
-  app.setGlobalPrefix(configService.get('app.apiPrefix', 'api'));
+  app.setGlobalPrefix(configService.get('app.apiPrefix', 'api'), {
+    exclude: ['skill.md'],
+  });
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: configService.get('app.apiVersion', '1'),

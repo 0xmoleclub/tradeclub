@@ -3,9 +3,13 @@
   "rootDir": ".",
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
+  "setupFiles": ["<rootDir>/test-setup.ts"],
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(@nktkas/hyperliquid|@noble/hashes)/)"
+  ],
   "moduleNameMapper": {
     "^@/(.*)$": "<rootDir>/../src/$1",
     "^@config/(.*)$": "<rootDir>/../src/config/$1",
