@@ -105,12 +105,39 @@ async function main() {
   );
   await marketFactory.waitForDeployment();
 
-  console.log('Deployment complete:');
-  console.log(`MatchSettlement:         ${await matchSettlement.getAddress()}`);
-  console.log(
-    `PredictionMarket (impl): ${await predictionMarket.getAddress()}`,
+  // Deploy ERC-8004 Agent Identity Registry
+  const AgentIdentityRegistry = await ethers.getContractFactory(
+    'AgentIdentityRegistry',
+    deployer,
   );
-  console.log(`MarketFactory:           ${await marketFactory.getAddress()}`);
+  const agentIdentityRegistry = await AgentIdentityRegistry.deploy(deployerAddress);
+  await agentIdentityRegistry.waitForDeployment();
+
+  // Deploy ERC-8004 Agent Reputation Registry
+  const AgentReputationRegistry = await ethers.getContractFactory(
+    'AgentReputationRegistry',
+    deployer,
+  );
+  const agentReputationRegistry = await AgentReputationRegistry.deploy(deployerAddress);
+  await agentReputationRegistry.waitForDeployment();
+  await agentReputationRegistry.initialize(await agentIdentityRegistry.getAddress());
+
+  // Deploy ERC-8004 Agent Validation Registry
+  const AgentValidationRegistry = await ethers.getContractFactory(
+    'AgentValidationRegistry',
+    deployer,
+  );
+  const agentValidationRegistry = await AgentValidationRegistry.deploy(deployerAddress);
+  await agentValidationRegistry.waitForDeployment();
+  await agentValidationRegistry.initialize(await agentIdentityRegistry.getAddress());
+
+  console.log('Deployment complete:');
+  console.log(`MatchSettlement:            ${await matchSettlement.getAddress()}`);
+  console.log(`PredictionMarket (impl):    ${await predictionMarket.getAddress()}`);
+  console.log(`MarketFactory:              ${await marketFactory.getAddress()}`);
+  console.log(`AgentIdentityRegistry:      ${await agentIdentityRegistry.getAddress()}`);
+  console.log(`AgentReputationRegistry:    ${await agentReputationRegistry.getAddress()}`);
+  console.log(`AgentValidationRegistry:    ${await agentValidationRegistry.getAddress()}`);
 
   await connection.close();
 }
