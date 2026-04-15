@@ -13,6 +13,9 @@ export interface ChainConfig {
       matchSettlement: string;
       stablecoin: string;
       feeCollector: string;
+      identityRegistry: string;
+      reputationRegistry: string;
+      validationRegistry: string;
     };
     market: {
       outcomesCount: number;
@@ -37,6 +40,9 @@ export const chainConfig = registerAs(
         matchSettlement: process.env.EVM_MATCH_SETTLEMENT!,
         stablecoin: process.env.EVM_STABLECOIN!,
         feeCollector: process.env.EVM_FEE_COLLECTOR!,
+        identityRegistry: process.env.EVM_IDENTITY_REGISTRY || '',
+        reputationRegistry: process.env.EVM_REPUTATION_REGISTRY || '',
+        validationRegistry: process.env.EVM_VALIDATION_REGISTRY || '',
       },
       market: {
         outcomesCount: parseInt(process.env.EVM_OUTCOMES_COUNT || '2', 10),

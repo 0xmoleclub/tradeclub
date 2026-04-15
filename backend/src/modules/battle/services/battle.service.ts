@@ -14,6 +14,7 @@ import { buildRanking } from '../utils/ranking.util';
 import { computeEloDelta } from '../utils/elo.util';
 import { PredictionMarketService } from '@modules/prediction-market/services/prediction-market.service';
 import { CreateBattleResultDto } from '../dto/battle-result.dto';
+import { AgentReputationService } from './agent-reputation.service';
 
 // ORCHESTRATOR SERVICE FOR BATTLE LIFECYCLE
 
@@ -24,12 +25,9 @@ export class BattleService {
     private readonly prisma: PrismaService,
     private readonly logger: LoggerService,
     private readonly predictionMarketService: PredictionMarketService,
+    private readonly agentReputationService: AgentReputationService,
   ) {}
 
-  /**
-   * Gets battle details along with its players.
-   * This is used to fetch the current state of the battle.
-   */
   async getBattle(battleId: string) {
     return this.prisma.battle.findUnique({
       where: { id: battleId },
@@ -37,13 +35,8 @@ export class BattleService {
     });
   }
 
-  /**
-   * Creates a new battle based on the matched players from matchmaking.
-   * This is triggered when a match is found and a battle needs to be created.
-   */
   async create(match: MatchGroup): Promise<Battle> {
     const { battle, question } = await this.prisma.$transaction(async (tx) => {
-      // ensure users still PENDING
       const updated = await tx.user.updateMany({
         where: {
           id: { in: match.players.map((p) => p.userId) },
@@ -60,7 +53,7 @@ export class BattleService {
 
       const b = await tx.battle.create({
         data: {
-          status: BattleStatus.WAITING, // initial status
+          status: BattleStatus.WAITING,
           maxPlayers: match.players.length,
           metadata: {
             matchId: match.matchId,
@@ -71,14 +64,12 @@ export class BattleService {
         },
       });
 
-      // Every battle starts with a default prediction question "Who will win the battle?"
-      // and N outcomes (N = number of players) corresponding to "Player 1 wins", "Player 2 wins", etc.
       const q = await tx.battlePredictionQuestion.create({
         data: {
           battleId: b.id,
           questionText: 'Who will win the battle?',
           description:
-            'Predict which player will win the battle based on who has the highest PnL at the end.',
+            'Predict which combatant will win the battle based on who has the highest PnL at the end.',
         },
       });
 
@@ -92,7 +83,6 @@ export class BattleService {
         }),
       });
 
-      // create battle players
       await tx.battlePlayer.createMany({
         data: match.players.map((p, index) => ({
           battleId: b.id,
@@ -113,7 +103,6 @@ export class BattleService {
       throw new Error(`Failed to create battle for match ${match.matchId}`);
     }
 
-    // Deploy onchain prediction market for battle (async op in message queue)
     try {
       await this.predictionMarketService.enqueueCreateMarket({
         battleId: battle.id,
@@ -130,11 +119,6 @@ export class BattleService {
     return battle;
   }
 
-  /**
-   * Starts the battle if all players are ready.
-   * It updates the battle status to STARTED and marks players as PLAYING.
-   * Lock users to prevent them from joining other battles while this battle is active.
-   */
   async battleStart(
     battleId: string,
     tx: Prisma.TransactionClient = this.prisma,
@@ -143,12 +127,10 @@ export class BattleService {
       where: { id: battleId },
     });
 
-    // check if battle exists and is in correct status
     if (!battle || battle.status !== BattleStatus.WAITING) {
       return null;
     }
 
-    // update battle status to STARTED
     await tx.battle.update({
       where: { id: battleId },
       data: {
@@ -157,20 +139,12 @@ export class BattleService {
       },
     });
 
-    // mark players as playing
     await this.player.markPlaying(battleId, tx);
-
-    // lock users in battle -> set IN_BATTLE status
     await this.toggleLockUser(battleId, UserStatus.IN_BATTLE, tx);
 
     return true;
   }
 
-  /**
-   * Finishes the battle if all players are finished.
-   * It updates the battle status to FINISHED, calculates results, updates player stats, and unlocks users.
-   * This is triggered when the battle is evaluated and determined to be finished.
-   */
   async battleFinish(
     battleId: string,
     dto: CreateBattleResultDto,
@@ -181,12 +155,10 @@ export class BattleService {
       include: { players: true },
     });
 
-    // check if battle exists and is in correct status
     if (!battle || battle.status !== BattleStatus.STARTED) {
       return null;
     }
 
-    // mark all playing players as finished
     await tx.battle.update({
       where: { id: battleId },
       data: {
@@ -195,13 +167,8 @@ export class BattleService {
       },
     });
 
-    // update players elo and rank points based on battle result
     await this.updateEloAndRankPoints(battleId, dto, tx);
-
-    // unlock users in battle -> set ACTIVE status
     await this.toggleLockUser(battleId, UserStatus.ACTIVE, tx);
-
-    // create battle result
     const result = await this.createBattleResult(battleId, dto, tx);
 
     if (result) {
@@ -211,16 +178,27 @@ export class BattleService {
           error instanceof Error ? error.stack : String(error),
         );
       });
+
+      void this.agentReputationService
+        .submitBattleReputation(
+          battleId,
+          dto.metrics.map((m) => ({
+            playerSlot: m.playerSlot,
+            metric: m.metric,
+            value: m.value.toString(),
+          })),
+        )
+        .catch((error) => {
+          this.logger.error(
+            `Failed to submit agent reputation for battle ${battleId}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+        });
     }
 
     return result;
   }
 
-  /**
-   * Cancels the battle if it is still in WAITING status.
-   * It updates the battle status to CANCELLED and unlocks users if necessary.
-   * This is triggered when the battle is evaluated and determined to be cancelled (e.g., a player left).
-   */
   async battleCancel(
     battleId: string,
     tx: Prisma.TransactionClient = this.prisma,
@@ -247,13 +225,6 @@ export class BattleService {
     return cancelled;
   }
 
-  // ==================== UTILS ====================
-
-  /**
-   * Toggles lock status for a list of users.
-   * This is used to lock users when they are in a battle and unlock them when the battle finishes or is cancelled.
-   * It updates the user's status to prevent them from joining other battles while locked.
-   */
   private async toggleLockUser(
     battleId: string,
     status: UserStatus,
@@ -276,7 +247,6 @@ export class BattleService {
     dto: CreateBattleResultDto,
     tx: Prisma.TransactionClient,
   ) {
-    // TODO: replace with real metrics engine
     return tx.battleResult.create({
       data: {
         battleId,
@@ -302,14 +272,9 @@ export class BattleService {
     dto: CreateBattleResultDto,
     tx: Prisma.TransactionClient,
   ) {
-    // fetch players and their current elo
     const players = await this.player.getPlayers(battleId, tx);
-
-    // compute ranking based on result
     const ranking = buildRanking(dto.metrics);
 
-    // update player's elo based on battle result and eloSnapshot
-    // update player's rankPoints (winner)
     for (const rank of ranking) {
       const player = players.find((p) => p.slot === rank.slot);
       if (!player) continue;
@@ -320,7 +285,7 @@ export class BattleService {
         where: { id: player.userId },
         data: {
           elo: { increment: delta },
-          rankPoints: { increment: delta }, // TODO: separate rankPoints and elo
+          rankPoints: { increment: delta },
         },
       });
     }
@@ -348,11 +313,6 @@ export class BattleService {
       return;
     }
 
-    // `slot` is a 1-based player position in the ranking, while the prediction market
-    // contract expects a zero-based outcome index. The top-ranked player is at
-    // `ranking[0]`, so we subtract 1 from its slot to derive the on-chain outcome id.
-    // If a battle has N players (N slots), the first N outcomes in prediction market contract
-    // respectively corresponds to the prediction of each player winning
     const outcome = ranking[0].slot - 1;
     await this.predictionMarketService.enqueueProposeOutcome({
       battleId,
@@ -364,4 +324,3 @@ export class BattleService {
     });
   }
 }
-// respectively correspond to the prediction of each player winning
