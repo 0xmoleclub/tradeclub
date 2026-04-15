@@ -33,6 +33,9 @@ import { getRedisConnection } from './shared/utils/redis';
 // Agent Registry
 import { AgentRegistryModule } from './modules/agent-registry/agent-registry.module';
 
+// Agent Arena
+import { AgentArenaModule } from './modules/agent-arena/agent-arena.module';
+
 // DEPRECATED: Solana/Drift modules - commented out for EVM/Hypercore migration
 // import { AgentWalletsModule } from './modules/drift-agent-wallets/drift-agent-wallets.module';
 // import { DriftModule } from './modules/drift/drift.module';
@@ -91,6 +94,9 @@ import { AgentRegistryModule } from './modules/agent-registry/agent-registry.mod
 
     // Agent Registry
     AgentRegistryModule,
+
+    // Agent Arena
+    AgentArenaModule,
 
     // DEPRECATED: Solana/Drift modules - migrating to EVM/Hypercore
     // DriftAgentWalletsModule,
