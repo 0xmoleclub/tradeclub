@@ -7,18 +7,11 @@ import { User } from '@prisma/client';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  /**
-   * Generate a random 6-digit nonce
-   */
   private randomNonce(): string {
     return Math.floor(Math.random() * 900000 + 100000).toString();
   }
 
-  /**
-   * Get or create nonce for EVM address
-   */
   async getNonce(evmAddress: string): Promise<string> {
-    // Validate EVM address
     if (!isAddress(evmAddress, { strict: false })) {
       throw new BadRequestException('Invalid EVM address format');
     }
@@ -37,9 +30,6 @@ export class UsersService {
     return user.nonce!;
   }
 
-  /**
-   * Clear nonce and update last login after successful login
-   */
   async loginSuccess(userId: string): Promise<User> {
     return this.prisma.user.update({
       where: { id: userId },
@@ -58,6 +48,7 @@ export class UsersService {
             agentAddress: true,
           },
         },
+        agentProfile: true,
       },
     });
   }
@@ -71,6 +62,7 @@ export class UsersService {
             agentAddress: true,
           },
         },
+        agentProfile: true,
       },
     });
 
@@ -80,17 +72,17 @@ export class UsersService {
     return user;
   }
 
-  /**
-   * Find user by EVM wallet address
-   */
   async findByEvmAddress(evmAddress: string): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { evmAddress },
+      include: {
+        agentProfile: true,
+      },
     });
   }
 
   async update(id: string, data: Partial<User>): Promise<User> {
-    await this.findById(id); // Verify user exists
+    await this.findById(id);
     return this.prisma.user.update({
       where: { id },
       data,

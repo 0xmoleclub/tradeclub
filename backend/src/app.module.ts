@@ -30,6 +30,9 @@ import { BattleModule } from './modules/battle/battle.module';
 import { TestBattleModule } from './modules/battle/test/test-battle.module';
 import { getRedisConnection } from './shared/utils/redis';
 
+// Agent Registry
+import { AgentRegistryModule } from './modules/agent-registry/agent-registry.module';
+
 // DEPRECATED: Solana/Drift modules - commented out for EVM/Hypercore migration
 // import { AgentWalletsModule } from './modules/drift-agent-wallets/drift-agent-wallets.module';
 // import { DriftModule } from './modules/drift/drift.module';
@@ -85,6 +88,9 @@ import { getRedisConnection } from './shared/utils/redis';
     // NEW: EVM/Hypercore modules
     HypercoreWalletsModule,
     HypercoreModule,
+
+    // Agent Registry
+    AgentRegistryModule,
 
     // DEPRECATED: Solana/Drift modules - migrating to EVM/Hypercore
     // DriftAgentWalletsModule,
