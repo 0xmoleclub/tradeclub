@@ -15,7 +15,7 @@ export class AgentRegistryController {
   @Post('register')
   @ApiOperation({ summary: 'Register a new AI agent (ERC-8004)' })
   async register(
-    @CurrentUser('sub') ownerId: string,
+    @CurrentUser('id') ownerId: string,
     @Body() dto: RegisterAgentDto,
   ) {
     return this.agentRegistryService.registerAgent(ownerId, dto);
@@ -23,7 +23,7 @@ export class AgentRegistryController {
 
   @Get('mine')
   @ApiOperation({ summary: 'Get my registered agents' })
-  async myAgents(@CurrentUser('sub') ownerId: string) {
+  async myAgents(@CurrentUser('id') ownerId: string) {
     return this.agentRegistryService.findAgentsByOwner(ownerId);
   }
 
